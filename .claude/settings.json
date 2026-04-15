@@ -1,0 +1,60 @@
+{
+  "skills": {
+    "distributed-system-debug": {
+      "enabled": true,
+      "description": "Debug distributed system issues"
+    },
+    "grpc-interface-design": {
+      "enabled": true,
+      "description": "Design gRPC interfaces"
+    },
+    "region-management": {
+      "enabled": true,
+      "description": "Manage Region lifecycle"
+    },
+    "paxos-implementation": {
+      "enabled": true,
+      "description": "Implement Paxos consensus"
+    }
+  },
+  "agents": {
+    "master-specialist": {
+      "enabled": true,
+      "model": "sonnet",
+      "description": "Master module specialist"
+    },
+    "regionserver-specialist": {
+      "enabled": true,
+      "model": "sonnet",
+      "description": "RegionServer module specialist"
+    },
+    "replication-specialist": {
+      "enabled": true,
+      "model": "sonnet",
+      "description": "Replication and consensus specialist"
+    },
+    "client-specialist": {
+      "enabled": true,
+      "model": "sonnet",
+      "description": "Client SDK specialist"
+    }
+  },
+  "permissions": {
+    "allow": [
+      "Bash(mvn *)",
+      "Bash(git *)",
+      "Read(**/*.java)",
+      "Read(**/*.proto)",
+      "Write(**/*.java)",
+      "Write(**/*.proto)",
+      "Edit(**/*.java)",
+      "Edit(**/*.proto)"
+    ]
+  },
+  "preferences": {
+    "codeStyle": "google-java-style",
+    "testFramework": "junit5",
+    "buildTool": "maven",
+    "commitStyle": "conventional"
+  }
+}

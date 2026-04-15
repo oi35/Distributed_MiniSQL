@@ -1,0 +1,10 @@
+# Claude Code - only commit project-specific configurations
+# Exclude user-specific settings
+.claude/settings.local.json
+.claude/cache/
+.claude/logs/
+
+# Keep project-specific configurations
+!.claude/skills/
+!.claude/agents/
+!.claude/settings.json
