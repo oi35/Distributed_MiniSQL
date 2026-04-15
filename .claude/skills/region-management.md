@@ -183,3 +183,33 @@ void testRegionMigration() {
     assertEquals(getDataFromRS1(region), getDataFromRS2(region));
 }
 ```
+
+## Git Workflow
+
+**IMPORTANT:** All code changes must follow this workflow:
+
+1. **Work on develop branch:** All development work happens on the `develop` branch
+2. **Commit frequently:** Commit after completing each logical unit of work
+3. **Stage completion:** Only merge to `master` after:
+   - All tests pass
+   - Code review is complete
+   - Stage/milestone is verified and meets requirements
+4. **Merge to master:** Use Pull Request or direct merge after verification
+
+**Commands:**
+```bash
+# Ensure you're on develop
+git checkout develop
+
+# Make changes and commit
+git add <files>
+git commit -m "type(scope): description"
+
+# Push to remote develop
+git push origin develop
+
+# After stage completion and verification
+git checkout master
+git merge develop
+git push origin master
+```
