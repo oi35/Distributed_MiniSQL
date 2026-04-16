@@ -11,21 +11,21 @@ option java_outer_classname = "CommonProto";
 // RegionServer状态
 enum ServerState {
   SERVER_STATE_UNSPECIFIED = 0;
-  ONLINE = 1;      // 正常运行
-  OFFLINE = 2;     // 优雅关闭
-  DEAD = 3;        // 故障/超时
+  SERVER_ONLINE = 1;      // 正常运行
+  SERVER_OFFLINE = 2;     // 优雅关闭
+  SERVER_DEAD = 3;        // 故障/超时
 }
 
 // Region状态
 enum RegionState {
   REGION_STATE_UNSPECIFIED = 0;
-  OFFLINE = 1;     // 离线
-  OPENING = 2;     // 正在打开
-  ONLINE = 3;      // 在线服务
-  SPLITTING = 4;   // 正在分裂
-  SPLIT = 5;       // 已分裂（待清理）
-  MIGRATING = 6;   // 正在迁移
-  CLOSED = 7;      // 已关闭
+  REGION_OFFLINE = 1;     // 离线
+  REGION_OPENING = 2;     // 正在打开
+  REGION_ONLINE = 3;      // 在线服务
+  REGION_SPLITTING = 4;   // 正在分裂
+  REGION_SPLIT = 5;       // 已分裂（待清理）
+  REGION_MIGRATING = 6;   // 正在迁移
+  REGION_CLOSED = 7;      // 已关闭
 }
 
 // ========== 核心数据结构 ==========
@@ -97,28 +97,28 @@ message ServerMetrics {
 
 // 错误码
 enum ErrorCode {
-  OK = 0;
-  UNKNOWN = 1;
-  INVALID_ARGUMENT = 2;
-  NOT_FOUND = 3;
-  ALREADY_EXISTS = 4;
-  PERMISSION_DENIED = 5;
-  RESOURCE_EXHAUSTED = 6;
-  FAILED_PRECONDITION = 7;
-  ABORTED = 8;
-  OUT_OF_RANGE = 9;
-  UNIMPLEMENTED = 10;
-  INTERNAL = 11;
-  UNAVAILABLE = 12;
-  DEADLINE_EXCEEDED = 13;
+  ERROR_OK = 0;
+  ERROR_UNKNOWN = 1;
+  ERROR_INVALID_ARGUMENT = 2;
+  ERROR_NOT_FOUND = 3;
+  ERROR_ALREADY_EXISTS = 4;
+  ERROR_PERMISSION_DENIED = 5;
+  ERROR_RESOURCE_EXHAUSTED = 6;
+  ERROR_FAILED_PRECONDITION = 7;
+  ERROR_ABORTED = 8;
+  ERROR_OUT_OF_RANGE = 9;
+  ERROR_UNIMPLEMENTED = 10;
+  ERROR_INTERNAL = 11;
+  ERROR_UNAVAILABLE = 12;
+  ERROR_DEADLINE_EXCEEDED = 13;
 
   // 业务错误码
-  REGION_NOT_FOUND = 100;
-  REGION_NOT_ONLINE = 101;
-  REGION_SPLITTING = 102;
-  TABLE_NOT_FOUND = 103;
-  TABLE_ALREADY_EXISTS = 104;
-  SERVER_NOT_FOUND = 105;
-  DUPLICATE_KEY = 106;
-  STALE_ROUTE = 107;
+  ERROR_REGION_NOT_FOUND = 100;
+  ERROR_REGION_NOT_ONLINE = 101;
+  ERROR_REGION_SPLITTING = 102;
+  ERROR_TABLE_NOT_FOUND = 103;
+  ERROR_TABLE_ALREADY_EXISTS = 104;
+  ERROR_SERVER_NOT_FOUND = 105;
+  ERROR_DUPLICATE_KEY = 106;
+  ERROR_STALE_ROUTE = 107;
 }
