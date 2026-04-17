@@ -1,6 +1,9 @@
 package com.minisql.master.service;
 
+import com.minisql.master.cluster.ClusterManager;
+import com.minisql.master.cluster.ServerInfo;
 import com.minisql.master.proto.*;
+import com.minisql.common.proto.ErrorCode;
 import io.grpc.stub.StreamObserver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,19 +17,47 @@ public class MasterServiceImpl extends MasterServiceGrpc.MasterServiceImplBase {
 
     private static final Logger logger = LoggerFactory.getLogger(MasterServiceImpl.class);
 
+    private final ClusterManager clusterManager;
+
+    public MasterServiceImpl(ClusterManager clusterManager) {
+        this.clusterManager = clusterManager;
+    }
+
     @Override
     public void registerRegionServer(RegisterRegionServerRequest request,
                                      StreamObserver<RegisterRegionServerResponse> responseObserver) {
         logger.info("Received RegisterRegionServer request from: {}", request.getServerId());
 
-        // TODO: 实现注册逻辑
-        RegisterRegionServerResponse response = RegisterRegionServerResponse.newBuilder()
-                .setSuccess(false)
-                .setErrorMessage("Not implemented yet")
-                .build();
+        try {
+            // 注册服务器
+            String assignedId = clusterManager.registerServer(
+                    request.getServerId(),
+                    request.getHost(),
+                    request.getPort()
+            );
 
-        responseObserver.onNext(response);
-        responseObserver.onCompleted();
+            RegisterRegionServerResponse response = RegisterRegionServerResponse.newBuilder()
+                    .setSuccess(true)
+                    .setAssignedServerId(assignedId)
+                    .setHeartbeatIntervalMs(clusterManager.getHeartbeatIntervalMs())
+                    .setErrorCode(ErrorCode.ERROR_OK)
+                    .build();
+
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+
+        } catch (Exception e) {
+            logger.error("Failed to register RegionServer", e);
+
+            RegisterRegionServerResponse response = RegisterRegionServerResponse.newBuilder()
+                    .setSuccess(false)
+                    .setErrorCode(ErrorCode.ERROR_INTERNAL)
+                    .setErrorMessage("Registration failed: " + e.getMessage())
+                    .build();
+
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+        }
     }
 
     @Override
@@ -34,13 +65,45 @@ public class MasterServiceImpl extends MasterServiceGrpc.MasterServiceImplBase {
                              StreamObserver<HeartbeatResponse> responseObserver) {
         logger.debug("Received heartbeat from: {}", request.getServerId());
 
-        // TODO: 实现心跳处理逻辑
-        HeartbeatResponse response = HeartbeatResponse.newBuilder()
-                .setAcknowledged(true)
-                .build();
+        try {
+            // 更新心跳
+            boolean success = clusterManager.updateHeartbeat(
+                    request.getServerId(),
+                    request.getMetrics()
+            );
 
-        responseObserver.onNext(response);
-        responseObserver.onCompleted();
+            if (!success) {
+                logger.warn("Heartbeat failed: server not found: {}", request.getServerId());
+            }
+
+            // 更新Region列表
+            ServerInfo serverInfo = clusterManager.getServerInfo(request.getServerId());
+            if (serverInfo != null) {
+                // 同步Region列表
+                for (String regionId : request.getRegionIdsList()) {
+                    if (!serverInfo.getRegions().containsKey(regionId)) {
+                        clusterManager.addRegionToServer(request.getServerId(), regionId, 0);
+                    }
+                }
+            }
+
+            HeartbeatResponse response = HeartbeatResponse.newBuilder()
+                    .setAcknowledged(true)
+                    .build();
+
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+
+        } catch (Exception e) {
+            logger.error("Failed to process heartbeat", e);
+
+            HeartbeatResponse response = HeartbeatResponse.newBuilder()
+                    .setAcknowledged(false)
+                    .build();
+
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+        }
     }
 
     @Override
@@ -48,13 +111,32 @@ public class MasterServiceImpl extends MasterServiceGrpc.MasterServiceImplBase {
                                        StreamObserver<UnregisterRegionServerResponse> responseObserver) {
         logger.info("Received UnregisterRegionServer request from: {}", request.getServerId());
 
-        // TODO: 实现注销逻辑
-        UnregisterRegionServerResponse response = UnregisterRegionServerResponse.newBuilder()
-                .setSuccess(true)
-                .build();
+        try {
+            boolean success = clusterManager.unregisterServer(request.getServerId());
 
-        responseObserver.onNext(response);
-        responseObserver.onCompleted();
+            // 获取需要迁移的Region列表
+            ServerInfo serverInfo = clusterManager.getServerInfo(request.getServerId());
+            UnregisterRegionServerResponse.Builder responseBuilder =
+                    UnregisterRegionServerResponse.newBuilder()
+                    .setSuccess(success);
+
+            if (serverInfo != null) {
+                responseBuilder.addAllRegionsToMigrate(serverInfo.getRegions().keySet());
+            }
+
+            responseObserver.onNext(responseBuilder.build());
+            responseObserver.onCompleted();
+
+        } catch (Exception e) {
+            logger.error("Failed to unregister RegionServer", e);
+
+            UnregisterRegionServerResponse response = UnregisterRegionServerResponse.newBuilder()
+                    .setSuccess(false)
+                    .build();
+
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+        }
     }
 
     @Override
@@ -63,13 +145,31 @@ public class MasterServiceImpl extends MasterServiceGrpc.MasterServiceImplBase {
         logger.info("Region {} is online on server: {}",
                    request.getRegionId(), request.getServerId());
 
-        // TODO: 实现Region上线处理逻辑
-        ReportRegionOnlineResponse response = ReportRegionOnlineResponse.newBuilder()
-                .setAcknowledged(true)
-                .build();
+        try {
+            // 添加Region到服务器
+            clusterManager.addRegionToServer(
+                    request.getServerId(),
+                    request.getRegionId(),
+                    request.getSizeBytes()
+            );
 
-        responseObserver.onNext(response);
-        responseObserver.onCompleted();
+            ReportRegionOnlineResponse response = ReportRegionOnlineResponse.newBuilder()
+                    .setAcknowledged(true)
+                    .build();
+
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+
+        } catch (Exception e) {
+            logger.error("Failed to report region online", e);
+
+            ReportRegionOnlineResponse response = ReportRegionOnlineResponse.newBuilder()
+                    .setAcknowledged(false)
+                    .build();
+
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+        }
     }
 
     @Override
@@ -78,13 +178,30 @@ public class MasterServiceImpl extends MasterServiceGrpc.MasterServiceImplBase {
         logger.info("Region {} is closed on server: {}",
                    request.getRegionId(), request.getServerId());
 
-        // TODO: 实现Region关闭处理逻辑
-        ReportRegionClosedResponse response = ReportRegionClosedResponse.newBuilder()
-                .setAcknowledged(true)
-                .build();
+        try {
+            // 从服务器移除Region
+            clusterManager.removeRegionFromServer(
+                    request.getServerId(),
+                    request.getRegionId()
+            );
 
-        responseObserver.onNext(response);
-        responseObserver.onCompleted();
+            ReportRegionClosedResponse response = ReportRegionClosedResponse.newBuilder()
+                    .setAcknowledged(true)
+                    .build();
+
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+
+        } catch (Exception e) {
+            logger.error("Failed to report region closed", e);
+
+            ReportRegionClosedResponse response = ReportRegionClosedResponse.newBuilder()
+                    .setAcknowledged(false)
+                    .build();
+
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+        }
     }
 
     @Override
