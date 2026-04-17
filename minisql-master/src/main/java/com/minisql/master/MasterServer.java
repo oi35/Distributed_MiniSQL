@@ -1,5 +1,8 @@
 package com.minisql.master;
 
+import com.minisql.master.cluster.ClusterManager;
+import com.minisql.master.cluster.FailureRecoveryManager;
+import com.minisql.master.cluster.HeartbeatMonitor;
 import com.minisql.master.service.ClientMasterServiceImpl;
 import com.minisql.master.service.MasterServiceImpl;
 import io.grpc.Server;
@@ -21,11 +24,31 @@ public class MasterServer {
 
     private final int port;
     private final Server server;
+    private final ClusterManager clusterManager;
+    private final HeartbeatMonitor heartbeatMonitor;
+    private final FailureRecoveryManager failureRecoveryManager;
+
+    // 配置参数
+    private static final long HEARTBEAT_TIMEOUT_MS = 30000; // 30秒
+    private static final int HEARTBEAT_INTERVAL_MS = 3000;  // 3秒
+    private static final long MONITOR_CHECK_INTERVAL_MS = 10000; // 10秒
 
     public MasterServer(int port) {
         this.port = port;
+
+        // 初始化集群管理器
+        this.clusterManager = new ClusterManager(HEARTBEAT_TIMEOUT_MS, HEARTBEAT_INTERVAL_MS);
+
+        // 初始化故障恢复管理器
+        this.failureRecoveryManager = new FailureRecoveryManager(clusterManager);
+
+        // 初始化心跳监控器
+        this.heartbeatMonitor = new HeartbeatMonitor(clusterManager, MONITOR_CHECK_INTERVAL_MS);
+        this.heartbeatMonitor.setFailureHandler(failureRecoveryManager);
+
+        // 构建gRPC服务器
         this.server = ServerBuilder.forPort(port)
-                .addService(new MasterServiceImpl())
+                .addService(new MasterServiceImpl(clusterManager))
                 .addService(new ClientMasterServiceImpl())
                 .build();
     }
@@ -36,6 +59,10 @@ public class MasterServer {
     public void start() throws IOException {
         server.start();
         logger.info("Master server started, listening on port {}", port);
+
+        // 启动心跳监控器
+        heartbeatMonitor.start();
+        logger.info("HeartbeatMonitor started");
 
         // 注册关闭钩子
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -52,6 +79,13 @@ public class MasterServer {
      * 停止服务器
      */
     public void stop() throws InterruptedException {
+        // 停止心跳监控器
+        if (heartbeatMonitor != null) {
+            heartbeatMonitor.stop();
+            logger.info("HeartbeatMonitor stopped");
+        }
+
+        // 停止gRPC服务器
         if (server != null) {
             logger.info("Stopping Master server...");
             server.shutdown().awaitTermination(30, TimeUnit.SECONDS);
