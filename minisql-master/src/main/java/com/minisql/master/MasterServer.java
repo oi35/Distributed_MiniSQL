@@ -3,6 +3,7 @@ package com.minisql.master;
 import com.minisql.master.cluster.ClusterManager;
 import com.minisql.master.cluster.FailureRecoveryManager;
 import com.minisql.master.cluster.HeartbeatMonitor;
+import com.minisql.master.metadata.MetadataManager;
 import com.minisql.master.service.ClientMasterServiceImpl;
 import com.minisql.master.service.MasterServiceImpl;
 import io.grpc.Server;
@@ -25,6 +26,7 @@ public class MasterServer {
     private final int port;
     private final Server server;
     private final ClusterManager clusterManager;
+    private final MetadataManager metadataManager;
     private final HeartbeatMonitor heartbeatMonitor;
     private final FailureRecoveryManager failureRecoveryManager;
 
@@ -39,6 +41,9 @@ public class MasterServer {
         // 初始化集群管理器
         this.clusterManager = new ClusterManager(HEARTBEAT_TIMEOUT_MS, HEARTBEAT_INTERVAL_MS);
 
+        // 初始化元数据管理器
+        this.metadataManager = new MetadataManager();
+
         // 初始化故障恢复管理器
         this.failureRecoveryManager = new FailureRecoveryManager(clusterManager);
 
@@ -49,7 +54,7 @@ public class MasterServer {
         // 构建gRPC服务器
         this.server = ServerBuilder.forPort(port)
                 .addService(new MasterServiceImpl(clusterManager))
-                .addService(new ClientMasterServiceImpl())
+                .addService(new ClientMasterServiceImpl(metadataManager))
                 .build();
     }
 
