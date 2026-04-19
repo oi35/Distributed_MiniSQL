@@ -1,0 +1,358 @@
+syntax = "proto3";
+
+package minisql.regionserver;
+
+import "common.proto";
+
+option java_multiple_files = true;
+option java_package = "com.minisql.regionserver.proto";
+option java_outer_classname = "RegionServerProto";
+
+// ========================================
+// RegionServer ↔ Client 服务接口
+// ========================================
+
+service RegionServerService {
+  // ========== 单行操作（显式方法）==========
+
+  // 插入单行数据
+  rpc Put(PutRequest)
+      returns (PutResponse);
+
+  // 查询单行数据
+  rpc Get(GetRequest)
+      returns (GetResponse);
+
+  // 删除单行数据
+  rpc Delete(DeleteRequest)
+      returns (DeleteResponse);
+
+  // 检查行是否存在
+  rpc Exists(ExistsRequest)
+      returns (ExistsResponse);
+
+
+  // ========== 批量操作（显式方法）==========
+
+  // 批量插入
+  rpc BatchPut(BatchPutRequest)
+      returns (BatchPutResponse);
+
+  // 批量查询
+  rpc BatchGet(BatchGetRequest)
+      returns (BatchGetResponse);
+
+  // 批量删除
+  rpc BatchDelete(BatchDeleteRequest)
+      returns (BatchDeleteResponse);
+
+
+  // ========== 范围扫描（显式方法，流式）==========
+
+  // 范围扫描（流式返回）
+  rpc Scan(ScanRequest)
+      returns (stream ScanResponse);
+
+
+  // ========== 高级查询（泛型方法，用于扩展）==========
+
+  // 通用查询操作（聚合、过滤等）
+  rpc Query(QueryRequest)
+      returns (QueryResponse);
+
+
+  // ========== Region管理（Master调用）==========
+
+  // Master指令：打开Region
+  rpc OpenRegion(OpenRegionRequest)
+      returns (OpenRegionResponse);
+
+  // Master指令：关闭Region
+  rpc CloseRegion(CloseRegionRequest)
+      returns (CloseRegionResponse);
+
+  // Master指令：迁移Region
+  rpc MigrateRegion(MigrateRegionRequest)
+      returns (MigrateRegionResponse);
+
+
+  // ========== 副本同步（RegionServer间调用）==========
+
+  // 副本同步：获取WAL日志
+  rpc GetReplicationLog(GetReplicationLogRequest)
+      returns (stream ReplicationLogEntry);
+
+  // 副本同步：应用WAL日志
+  rpc ApplyReplicationLog(ApplyReplicationLogRequest)
+      returns (ApplyReplicationLogResponse);
+}
+
+// ========================================
+// Request/Response 消息定义
+// ========================================
+
+// ========== 单行操作 ==========
+
+message PutRequest {
+  string table_name = 1;
+  string region_id = 2;
+  bytes key = 3;
+  map<string, bytes> columns = 4; // 列名 -> 列值
+  bool sync_replicas = 5;         // 是否同步到副本（默认true）
+  int64 timestamp = 6;            // 客户端时间戳
+}
+
+message PutResponse {
+  bool success = 1;
+  minisql.common.ErrorCode error_code = 2;
+  string error_message = 3;
+  int64 sequence_id = 4;          // WAL序列号
+}
+
+message GetRequest {
+  string table_name = 1;
+  string region_id = 2;
+  bytes key = 3;
+  repeated string columns = 4;    // 要查询的列，空表示所有列
+}
+
+message GetResponse {
+  bool found = 1;
+  map<string, bytes> columns = 2;
+  int64 timestamp = 3;
+  minisql.common.ErrorCode error_code = 4;
+  string error_message = 5;
+}
+
+message DeleteRequest {
+  string table_name = 1;
+  string region_id = 2;
+  bytes key = 3;
+  bool sync_replicas = 4;
+}
+
+message DeleteResponse {
+  bool success = 1;
+  bool existed = 2;               // 删除前是否存在
+  minisql.common.ErrorCode error_code = 3;
+  string error_message = 4;
+  int64 sequence_id = 5;
+}
+
+message ExistsRequest {
+  string table_name = 1;
+  string region_id = 2;
+  bytes key = 3;
+}
+
+message ExistsResponse {
+  bool exists = 1;
+}
+
+// ========== 批量操作 ==========
+
+message BatchPutRequest {
+  string table_name = 1;
+  string region_id = 2;
+  repeated RowData rows = 3;
+  bool sync_replicas = 4;
+}
+
+message RowData {
+  bytes key = 1;
+  map<string, bytes> columns = 2;
+}
+
+message BatchPutResponse {
+  int32 success_count = 1;
+  int32 failed_count = 2;
+  repeated int32 failed_indices = 3;    // 失败的行索引
+  repeated string error_messages = 4;   // 对应的错误信息
+  repeated int64 sequence_ids = 5;      // 成功的WAL序列号
+}
+
+message BatchGetRequest {
+  string table_name = 1;
+  string region_id = 2;
+  repeated bytes keys = 3;
+  repeated string columns = 4;
+}
+
+message BatchGetResponse {
+  repeated GetResult results = 1;       // 与keys顺序对应
+}
+
+message GetResult {
+  bool found = 1;
+  map<string, bytes> columns = 2;
+  int64 timestamp = 3;
+}
+
+message BatchDeleteRequest {
+  string table_name = 1;
+  string region_id = 2;
+  repeated bytes keys = 3;
+  bool sync_replicas = 4;
+}
+
+message BatchDeleteResponse {
+  int32 deleted_count = 1;
+  repeated bool results = 2;            // 每个key是否删除成功
+}
+
+// ========== 范围扫描 ==========
+
+message ScanRequest {
+  string table_name = 1;
+  string region_id = 2;
+  bytes start_key = 3;                  // 起始键（包含）
+  bytes end_key = 4;                    // 结束键（不包含）
+  int32 limit = 5;                      // 最多返回行数，0表示无限制
+  repeated string columns = 6;          // 要返回的列
+  string filter = 7;                    // 过滤表达式（可选）
+  bool reverse = 8;                     // 是否反向扫描
+}
+
+message ScanResponse {
+  bytes key = 1;
+  map<string, bytes> columns = 2;
+  int64 timestamp = 3;
+  bool has_more = 4;                    // 是否还有更多数据
+}
+
+// ========== 高级查询（泛型） ==========
+
+message QueryRequest {
+  string table_name = 1;
+  string region_id = 2;
+  oneof query_type {
+    CountQuery count = 10;
+    AggregateQuery aggregate = 11;
+    FilterQuery filter = 12;
+  }
+}
+
+message CountQuery {
+  bytes start_key = 1;
+  bytes end_key = 2;
+  string filter = 3;
+}
+
+message AggregateQuery {
+  enum AggregateFunction {
+    SUM = 0;
+    AVG = 1;
+    MIN = 2;
+    MAX = 3;
+  }
+  AggregateFunction function = 1;
+  string column_name = 2;
+  bytes start_key = 3;
+  bytes end_key = 4;
+  string filter = 5;
+}
+
+message FilterQuery {
+  bytes start_key = 1;
+  bytes end_key = 2;
+  string filter_expression = 3;
+  int32 limit = 4;
+  repeated string columns = 5;
+}
+
+message QueryResponse {
+  bool success = 1;
+  minisql.common.ErrorCode error_code = 2;
+  string error_message = 3;
+  oneof result {
+    CountResult count_result = 10;
+    AggregateResult aggregate_result = 11;
+    FilterResult filter_result = 12;
+  }
+}
+
+message CountResult {
+  int64 count = 1;
+}
+
+message AggregateResult {
+  double value = 1;
+  int64 count = 2;                      // 参与计算的行数
+}
+
+message FilterResult {
+  repeated RowData rows = 1;
+}
+
+// ========== Region管理 ==========
+
+message OpenRegionRequest {
+  minisql.common.RegionInfo region = 1;
+}
+
+message OpenRegionResponse {
+  bool success = 1;
+  minisql.common.ErrorCode error_code = 2;
+  string error_message = 3;
+  int64 size_bytes = 4;
+  int64 row_count = 5;
+}
+
+message CloseRegionRequest {
+  string region_id = 1;
+  bool force = 2;                       // 强制关闭
+}
+
+message CloseRegionResponse {
+  bool success = 1;
+  minisql.common.ErrorCode error_code = 2;
+  string error_message = 3;
+}
+
+message MigrateRegionRequest {
+  string region_id = 1;
+  string target_server = 2;             // 目标服务器地址
+  string migration_id = 3;
+}
+
+message MigrateRegionResponse {
+  bool accepted = 1;
+  minisql.common.ErrorCode error_code = 2;
+  string error_message = 3;
+}
+
+// ========== 副本同步 ==========
+
+message GetReplicationLogRequest {
+  string region_id = 1;
+  int64 start_sequence = 2;             // 起始序列号
+  int64 end_sequence = 3;               // 结束序列号，0表示最新
+  int32 batch_size = 4;                 // 每批返回的日志数
+}
+
+message ReplicationLogEntry {
+  int64 sequence_id = 1;
+  string region_id = 2;
+  int64 timestamp = 3;
+  enum OperationType {
+    PUT = 0;
+    DELETE = 1;
+  }
+  OperationType operation = 4;
+  bytes key = 5;
+  map<string, bytes> columns = 6;       // PUT操作时有值
+  bytes checksum = 7;                   // 日志校验和
+}
+
+message ApplyReplicationLogRequest {
+  string region_id = 1;
+  repeated ReplicationLogEntry logs = 2;
+}
+
+message ApplyReplicationLogResponse {
+  bool success = 1;
+  int32 applied_count = 2;
+  int64 last_applied_sequence = 3;
+  minisql.common.ErrorCode error_code = 4;
+  string error_message = 5;
+}
