@@ -3,6 +3,7 @@ package com.minisql.master.balance;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Region迁移任务
@@ -17,12 +18,19 @@ public class MigrationTask {
     private final long createTime;
     private volatile long startTime;
     private volatile long endTime;
-    private volatile int retryCount;
+    private final AtomicInteger retryCount = new AtomicInteger(0);
     private volatile String errorMessage;
     private final Map<String, Object> metadata;
 
     public MigrationTask(String migrationId, String regionId,
                         String sourceServerId, String targetServerId) {
+        if (migrationId == null || regionId == null ||
+            sourceServerId == null || targetServerId == null) {
+            throw new IllegalArgumentException("Parameters cannot be null");
+        }
+        if (sourceServerId.equals(targetServerId)) {
+            throw new IllegalArgumentException("Source and target server cannot be the same");
+        }
         this.migrationId = migrationId;
         this.regionId = regionId;
         this.sourceServerId = sourceServerId;
@@ -31,7 +39,6 @@ public class MigrationTask {
         this.createTime = System.currentTimeMillis();
         this.startTime = 0;
         this.endTime = 0;
-        this.retryCount = 0;
         this.metadata = new ConcurrentHashMap<>();
     }
 
@@ -80,11 +87,11 @@ public class MigrationTask {
     }
 
     public int getRetryCount() {
-        return retryCount;
+        return retryCount.get();
     }
 
     public void incrementRetry() {
-        this.retryCount++;
+        retryCount.incrementAndGet();
     }
 
     public String getErrorMessage() {
@@ -120,6 +127,6 @@ public class MigrationTask {
     @Override
     public String toString() {
         return String.format("MigrationTask{id=%s, region=%s, %s->%s, state=%s, retry=%d}",
-                migrationId, regionId, sourceServerId, targetServerId, state, retryCount);
+                migrationId, regionId, sourceServerId, targetServerId, state, retryCount.get());
     }
 }

@@ -1,6 +1,8 @@
 package com.minisql.master.balance;
 
 import org.junit.Test;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.Assert.*;
 
 public class MigrationTaskTest {
@@ -18,6 +20,31 @@ public class MigrationTaskTest {
         assertEquals(0, task.getRetryCount());
         assertNull(task.getErrorMessage());
         assertTrue(task.getCreateTime() > 0);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testNullMigrationId() {
+        new MigrationTask(null, "region-123", "rs-001", "rs-002");
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testNullRegionId() {
+        new MigrationTask("mig-001", null, "rs-001", "rs-002");
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testNullSourceServerId() {
+        new MigrationTask("mig-001", "region-123", null, "rs-002");
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testNullTargetServerId() {
+        new MigrationTask("mig-001", "region-123", "rs-001", null);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testSameSourceAndTarget() {
+        new MigrationTask("mig-001", "region-123", "rs-001", "rs-001");
     }
 
     @Test
@@ -75,5 +102,38 @@ public class MigrationTaskTest {
             "mig-001", "region-123", "rs-001", "rs-002");
 
         assertEquals(0L, task.getDuration());
+    }
+
+    @Test
+    public void testConcurrentIncrementRetry() throws InterruptedException {
+        MigrationTask task = new MigrationTask(
+            "mig-001", "region-123", "rs-001", "rs-002");
+
+        int threadCount = 100;
+        int incrementsPerThread = 100;
+        CountDownLatch startLatch = new CountDownLatch(1);
+        CountDownLatch endLatch = new CountDownLatch(threadCount);
+        AtomicInteger errors = new AtomicInteger(0);
+
+        for (int i = 0; i < threadCount; i++) {
+            new Thread(() -> {
+                try {
+                    startLatch.await();
+                    for (int j = 0; j < incrementsPerThread; j++) {
+                        task.incrementRetry();
+                    }
+                } catch (Exception e) {
+                    errors.incrementAndGet();
+                } finally {
+                    endLatch.countDown();
+                }
+            }).start();
+        }
+
+        startLatch.countDown();
+        endLatch.await();
+
+        assertEquals(0, errors.get());
+        assertEquals(threadCount * incrementsPerThread, task.getRetryCount());
     }
 }
