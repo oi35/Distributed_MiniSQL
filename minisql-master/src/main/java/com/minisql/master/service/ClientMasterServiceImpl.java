@@ -1,9 +1,17 @@
 package com.minisql.master.service;
 
+import com.google.protobuf.ByteString;
+import com.minisql.master.metadata.MetadataManager;
+import com.minisql.master.metadata.RegionMetadata;
+import com.minisql.master.metadata.TableMetadata;
 import com.minisql.master.proto.*;
+import com.minisql.common.proto.ErrorCode;
+import com.minisql.common.proto.RouteEntry;
 import io.grpc.stub.StreamObserver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.List;
 
 /**
  * 客户端Master服务实现 - Master ↔ Client通信
@@ -14,20 +22,50 @@ public class ClientMasterServiceImpl extends ClientMasterServiceGrpc.ClientMaste
 
     private static final Logger logger = LoggerFactory.getLogger(ClientMasterServiceImpl.class);
 
+    private final MetadataManager metadataManager;
+
+    public ClientMasterServiceImpl(MetadataManager metadataManager) {
+        this.metadataManager = metadataManager;
+    }
+
     @Override
     public void createTable(CreateTableRequest request,
                            StreamObserver<CreateTableResponse> responseObserver) {
         logger.info("Received CreateTable request: {}", request.getSchema().getTableName());
 
-        // TODO: 实现创建表逻辑
-        CreateTableResponse response = CreateTableResponse.newBuilder()
-                .setSuccess(false)
-                .setErrorCode(com.minisql.common.proto.ErrorCode.ERROR_UNIMPLEMENTED)
-                .setErrorMessage("CreateTable not implemented yet")
-                .build();
+        try {
+            String tableName = request.getSchema().getTableName();
+            String partitionKey = ""; // TODO: 从Schema中提取分区键
 
-        responseObserver.onNext(response);
-        responseObserver.onCompleted();
+            boolean success = metadataManager.createTable(tableName, request.getSchema(), partitionKey);
+
+            CreateTableResponse.Builder responseBuilder = CreateTableResponse.newBuilder()
+                    .setSuccess(success);
+
+            if (success) {
+                responseBuilder.setErrorCode(ErrorCode.ERROR_OK);
+                logger.info("Table created successfully: {}", tableName);
+            } else {
+                responseBuilder
+                        .setErrorCode(ErrorCode.ERROR_TABLE_ALREADY_EXISTS)
+                        .setErrorMessage("Table already exists: " + tableName);
+            }
+
+            responseObserver.onNext(responseBuilder.build());
+            responseObserver.onCompleted();
+
+        } catch (Exception e) {
+            logger.error("Failed to create table", e);
+
+            CreateTableResponse response = CreateTableResponse.newBuilder()
+                    .setSuccess(false)
+                    .setErrorCode(ErrorCode.ERROR_INTERNAL)
+                    .setErrorMessage("Internal error: " + e.getMessage())
+                    .build();
+
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+        }
     }
 
     @Override
@@ -35,15 +73,36 @@ public class ClientMasterServiceImpl extends ClientMasterServiceGrpc.ClientMaste
                          StreamObserver<DropTableResponse> responseObserver) {
         logger.info("Received DropTable request: {}", request.getTableName());
 
-        // TODO: 实现删除表逻辑
-        DropTableResponse response = DropTableResponse.newBuilder()
-                .setSuccess(false)
-                .setErrorCode(com.minisql.common.proto.ErrorCode.ERROR_UNIMPLEMENTED)
-                .setErrorMessage("DropTable not implemented yet")
-                .build();
+        try {
+            boolean success = metadataManager.dropTable(request.getTableName());
 
-        responseObserver.onNext(response);
-        responseObserver.onCompleted();
+            DropTableResponse.Builder responseBuilder = DropTableResponse.newBuilder()
+                    .setSuccess(success);
+
+            if (success) {
+                responseBuilder.setErrorCode(ErrorCode.ERROR_OK);
+                logger.info("Table dropped successfully: {}", request.getTableName());
+            } else {
+                responseBuilder
+                        .setErrorCode(ErrorCode.ERROR_TABLE_NOT_FOUND)
+                        .setErrorMessage("Table not found: " + request.getTableName());
+            }
+
+            responseObserver.onNext(responseBuilder.build());
+            responseObserver.onCompleted();
+
+        } catch (Exception e) {
+            logger.error("Failed to drop table", e);
+
+            DropTableResponse response = DropTableResponse.newBuilder()
+                    .setSuccess(false)
+                    .setErrorCode(ErrorCode.ERROR_INTERNAL)
+                    .setErrorMessage("Internal error: " + e.getMessage())
+                    .build();
+
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+        }
     }
 
     @Override
@@ -51,15 +110,38 @@ public class ClientMasterServiceImpl extends ClientMasterServiceGrpc.ClientMaste
                               StreamObserver<GetTableSchemaResponse> responseObserver) {
         logger.info("Received GetTableSchema request: {}", request.getTableName());
 
-        // TODO: 实现获取表结构逻辑
-        GetTableSchemaResponse response = GetTableSchemaResponse.newBuilder()
-                .setSuccess(false)
-                .setErrorCode(com.minisql.common.proto.ErrorCode.ERROR_TABLE_NOT_FOUND)
-                .setErrorMessage("Table not found")
-                .build();
+        try {
+            TableMetadata table = metadataManager.getTable(request.getTableName());
 
-        responseObserver.onNext(response);
-        responseObserver.onCompleted();
+            GetTableSchemaResponse.Builder responseBuilder = GetTableSchemaResponse.newBuilder();
+
+            if (table != null) {
+                responseBuilder
+                        .setSuccess(true)
+                        .setErrorCode(ErrorCode.ERROR_OK)
+                        .setSchema(table.getSchema());
+            } else {
+                responseBuilder
+                        .setSuccess(false)
+                        .setErrorCode(ErrorCode.ERROR_TABLE_NOT_FOUND)
+                        .setErrorMessage("Table not found: " + request.getTableName());
+            }
+
+            responseObserver.onNext(responseBuilder.build());
+            responseObserver.onCompleted();
+
+        } catch (Exception e) {
+            logger.error("Failed to get table schema", e);
+
+            GetTableSchemaResponse response = GetTableSchemaResponse.newBuilder()
+                    .setSuccess(false)
+                    .setErrorCode(ErrorCode.ERROR_INTERNAL)
+                    .setErrorMessage("Internal error: " + e.getMessage())
+                    .build();
+
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+        }
     }
 
     @Override
@@ -67,12 +149,25 @@ public class ClientMasterServiceImpl extends ClientMasterServiceGrpc.ClientMaste
                           StreamObserver<ListTablesResponse> responseObserver) {
         logger.info("Received ListTables request");
 
-        // TODO: 实现列出表逻辑
-        ListTablesResponse response = ListTablesResponse.newBuilder()
-                .build();
+        try {
+            List<String> tableNames = metadataManager.listTables();
 
-        responseObserver.onNext(response);
-        responseObserver.onCompleted();
+            ListTablesResponse response = ListTablesResponse.newBuilder()
+                    .addAllTableNames(tableNames)
+                    .build();
+
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+
+        } catch (Exception e) {
+            logger.error("Failed to list tables", e);
+
+            ListTablesResponse response = ListTablesResponse.newBuilder()
+                    .build();
+
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+        }
     }
 
     @Override
@@ -81,15 +176,76 @@ public class ClientMasterServiceImpl extends ClientMasterServiceGrpc.ClientMaste
         logger.info("Received GetRouteTable request: table={}, cachedVersion={}",
                    request.getTableName(), request.getCachedVersion());
 
-        // TODO: 实现获取路由表逻辑
-        GetRouteTableResponse response = GetRouteTableResponse.newBuilder()
-                .setSuccess(false)
-                .setErrorCode(com.minisql.common.proto.ErrorCode.ERROR_TABLE_NOT_FOUND)
-                .setErrorMessage("Table not found")
-                .build();
+        try {
+            TableMetadata table = metadataManager.getTable(request.getTableName());
 
-        responseObserver.onNext(response);
-        responseObserver.onCompleted();
+            if (table == null) {
+                GetRouteTableResponse response = GetRouteTableResponse.newBuilder()
+                        .setSuccess(false)
+                        .setErrorCode(ErrorCode.ERROR_TABLE_NOT_FOUND)
+                        .setErrorMessage("Table not found: " + request.getTableName())
+                        .build();
+
+                responseObserver.onNext(response);
+                responseObserver.onCompleted();
+                return;
+            }
+
+            // 检查版本是否需要更新
+            if (request.getCachedVersion() >= table.getVersion()) {
+                GetRouteTableResponse response = GetRouteTableResponse.newBuilder()
+                        .setSuccess(true)
+                        .setErrorCode(ErrorCode.ERROR_OK)
+                        .setCacheValid(true)
+                        .build();
+
+                responseObserver.onNext(response);
+                responseObserver.onCompleted();
+                return;
+            }
+
+            // 构建路由表
+            List<RegionMetadata> regions = metadataManager.getTableRegions(request.getTableName());
+            com.minisql.common.proto.RegionRouteTable.Builder routeTableBuilder =
+                    com.minisql.common.proto.RegionRouteTable.newBuilder()
+                    .setTableName(request.getTableName())
+                    .setVersion(table.getVersion())
+                    .setUpdateTime(table.getUpdateTime());
+
+            for (RegionMetadata region : regions) {
+                RouteEntry routeEntry = RouteEntry.newBuilder()
+                        .setRegionId(region.getRegionId())
+                        .setStartKey(ByteString.copyFromUtf8(region.getStartKey()))
+                        .setEndKey(ByteString.copyFromUtf8(region.getEndKey()))
+                        .setPrimaryServer(region.getPrimaryServer() != null ? region.getPrimaryServer() : "")
+                        .addAllReplicaServers(region.getReplicas())
+                        .build();
+
+                routeTableBuilder.addRoutes(routeEntry);
+            }
+
+            GetRouteTableResponse response = GetRouteTableResponse.newBuilder()
+                    .setSuccess(true)
+                    .setErrorCode(ErrorCode.ERROR_OK)
+                    .setCacheValid(false)
+                    .setRouteTable(routeTableBuilder.build())
+                    .build();
+
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+
+        } catch (Exception e) {
+            logger.error("Failed to get route table", e);
+
+            GetRouteTableResponse response = GetRouteTableResponse.newBuilder()
+                    .setSuccess(false)
+                    .setErrorCode(ErrorCode.ERROR_INTERNAL)
+                    .setErrorMessage("Internal error: " + e.getMessage())
+                    .build();
+
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+        }
     }
 
     @Override
@@ -98,15 +254,49 @@ public class ClientMasterServiceImpl extends ClientMasterServiceGrpc.ClientMaste
         logger.info("Received GetRouteForKey request: table={}",
                    request.getTableName());
 
-        // TODO: 实现获取键路由逻辑
-        GetRouteForKeyResponse response = GetRouteForKeyResponse.newBuilder()
-                .setSuccess(false)
-                .setErrorCode(com.minisql.common.proto.ErrorCode.ERROR_TABLE_NOT_FOUND)
-                .setErrorMessage("Table not found")
-                .build();
+        try {
+            RegionMetadata region = metadataManager.findRegionForKey(
+                    request.getTableName(),
+                    request.getKey().toStringUtf8()
+            );
 
-        responseObserver.onNext(response);
-        responseObserver.onCompleted();
+            GetRouteForKeyResponse.Builder responseBuilder = GetRouteForKeyResponse.newBuilder();
+
+            if (region != null) {
+                RouteEntry routeEntry = RouteEntry.newBuilder()
+                        .setRegionId(region.getRegionId())
+                        .setStartKey(ByteString.copyFromUtf8(region.getStartKey()))
+                        .setEndKey(ByteString.copyFromUtf8(region.getEndKey()))
+                        .setPrimaryServer(region.getPrimaryServer() != null ? region.getPrimaryServer() : "")
+                        .addAllReplicaServers(region.getReplicas())
+                        .build();
+
+                responseBuilder
+                        .setSuccess(true)
+                        .setErrorCode(ErrorCode.ERROR_OK)
+                        .setRoute(routeEntry);
+            } else {
+                responseBuilder
+                        .setSuccess(false)
+                        .setErrorCode(ErrorCode.ERROR_REGION_NOT_FOUND)
+                        .setErrorMessage("No region found for key");
+            }
+
+            responseObserver.onNext(responseBuilder.build());
+            responseObserver.onCompleted();
+
+        } catch (Exception e) {
+            logger.error("Failed to get route for key", e);
+
+            GetRouteForKeyResponse response = GetRouteForKeyResponse.newBuilder()
+                    .setSuccess(false)
+                    .setErrorCode(ErrorCode.ERROR_INTERNAL)
+                    .setErrorMessage("Internal error: " + e.getMessage())
+                    .build();
+
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+        }
     }
 
     @Override
@@ -115,15 +305,44 @@ public class ClientMasterServiceImpl extends ClientMasterServiceGrpc.ClientMaste
         logger.info("Received GetRoutesForRange request: table={}",
                    request.getTableName());
 
-        // TODO: 实现获取范围路由逻辑
-        GetRoutesForRangeResponse response = GetRoutesForRangeResponse.newBuilder()
-                .setSuccess(false)
-                .setErrorCode(com.minisql.common.proto.ErrorCode.ERROR_TABLE_NOT_FOUND)
-                .setErrorMessage("Table not found")
-                .build();
+        try {
+            List<RegionMetadata> regions = metadataManager.findRegionsForRange(
+                    request.getTableName(),
+                    request.getStartKey().toStringUtf8(),
+                    request.getEndKey().toStringUtf8()
+            );
 
-        responseObserver.onNext(response);
-        responseObserver.onCompleted();
+            GetRoutesForRangeResponse.Builder responseBuilder = GetRoutesForRangeResponse.newBuilder()
+                    .setSuccess(true)
+                    .setErrorCode(ErrorCode.ERROR_OK);
+
+            for (RegionMetadata region : regions) {
+                RouteEntry routeEntry = RouteEntry.newBuilder()
+                        .setRegionId(region.getRegionId())
+                        .setStartKey(ByteString.copyFromUtf8(region.getStartKey()))
+                        .setEndKey(ByteString.copyFromUtf8(region.getEndKey()))
+                        .setPrimaryServer(region.getPrimaryServer() != null ? region.getPrimaryServer() : "")
+                        .addAllReplicaServers(region.getReplicas())
+                        .build();
+
+                responseBuilder.addRoutes(routeEntry);
+            }
+
+            responseObserver.onNext(responseBuilder.build());
+            responseObserver.onCompleted();
+
+        } catch (Exception e) {
+            logger.error("Failed to get routes for range", e);
+
+            GetRoutesForRangeResponse response = GetRoutesForRangeResponse.newBuilder()
+                    .setSuccess(false)
+                    .setErrorCode(ErrorCode.ERROR_INTERNAL)
+                    .setErrorMessage("Internal error: " + e.getMessage())
+                    .build();
+
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+        }
     }
 
     @Override
