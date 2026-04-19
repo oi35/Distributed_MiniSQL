@@ -48,4 +48,34 @@ public class MigrationStateTest {
         assertFalse(MigrationState.COMPLETED.canTransitionTo(MigrationState.PENDING));
         assertFalse(MigrationState.FAILED.canTransitionTo(MigrationState.PENDING));
     }
+
+    @Test
+    public void testAllValidTransitions() {
+        // MIGRATING_SYNC transitions
+        assertTrue(MigrationState.MIGRATING_SYNC.canTransitionTo(MigrationState.MIGRATING_SWITCH));
+        assertTrue(MigrationState.MIGRATING_SYNC.canTransitionTo(MigrationState.ROLLING_BACK));
+        assertTrue(MigrationState.MIGRATING_SYNC.canTransitionTo(MigrationState.CANCELLED));
+
+        // MIGRATING_SWITCH transitions
+        assertTrue(MigrationState.MIGRATING_SWITCH.canTransitionTo(MigrationState.COMPLETED));
+        assertTrue(MigrationState.MIGRATING_SWITCH.canTransitionTo(MigrationState.ROLLING_BACK));
+
+        // ROLLING_BACK transitions
+        assertTrue(MigrationState.ROLLING_BACK.canTransitionTo(MigrationState.FAILED));
+
+        // MIGRATING_PREPARE to CANCELLED
+        assertTrue(MigrationState.MIGRATING_PREPARE.canTransitionTo(MigrationState.CANCELLED));
+    }
+
+    @Test
+    public void testSelfTransitionNotAllowed() {
+        assertFalse(MigrationState.PENDING.canTransitionTo(MigrationState.PENDING));
+        assertFalse(MigrationState.MIGRATING_PREPARE.canTransitionTo(MigrationState.MIGRATING_PREPARE));
+    }
+
+    @Test
+    public void testNullTransitionHandling() {
+        assertFalse(MigrationState.PENDING.canTransitionTo(null));
+        assertFalse(MigrationState.COMPLETED.canTransitionTo(null));
+    }
 }

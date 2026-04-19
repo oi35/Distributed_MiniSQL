@@ -30,6 +30,9 @@ public enum MigrationState {
      * 是否可以转换到目标状态
      */
     public boolean canTransitionTo(MigrationState target) {
+        if (target == null) {
+            return false;
+        }
         if (this.isTerminal()) {
             return false;
         }
