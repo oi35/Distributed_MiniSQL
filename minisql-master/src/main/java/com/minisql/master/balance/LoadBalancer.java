@@ -51,7 +51,7 @@ public class LoadBalancer {
             return;
         }
 
-        if (!masterElection.isMaster()) {
+        if (!masterElection.isLeader()) {
             logger.warn("Not the leader, LoadBalancer will not start");
             return;
         }

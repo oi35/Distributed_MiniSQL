@@ -1,0 +1,269 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MasterServiceImpl.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">MiniSQL Master</a> &gt; <a href="index.source.html" class="el_package">com.minisql.master.service</a> &gt; <span class="el_source">MasterServiceImpl.java</span></div><h1>MasterServiceImpl.java</h1><pre class="source lang-java linenums">package com.minisql.master.service;
+
+import com.minisql.master.cluster.ClusterManager;
+import com.minisql.master.cluster.ServerInfo;
+import com.minisql.master.proto.*;
+import com.minisql.common.proto.ErrorCode;
+import io.grpc.stub.StreamObserver;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Master服务实现 - Master ↔ RegionServer通信
+ *
+ * 负责处理RegionServer的注册、心跳、Region管理等请求
+ */
+public class MasterServiceImpl extends MasterServiceGrpc.MasterServiceImplBase {
+
+<span class="nc" id="L18">    private static final Logger logger = LoggerFactory.getLogger(MasterServiceImpl.class);</span>
+
+    private final ClusterManager clusterManager;
+
+<span class="nc" id="L22">    public MasterServiceImpl(ClusterManager clusterManager) {</span>
+<span class="nc" id="L23">        this.clusterManager = clusterManager;</span>
+<span class="nc" id="L24">    }</span>
+
+    @Override
+    public void registerRegionServer(RegisterRegionServerRequest request,
+                                     StreamObserver&lt;RegisterRegionServerResponse&gt; responseObserver) {
+<span class="nc" id="L29">        logger.info(&quot;Received RegisterRegionServer request from: {}&quot;, request.getServerId());</span>
+
+        try {
+            // 注册服务器
+<span class="nc" id="L33">            String assignedId = clusterManager.registerServer(</span>
+<span class="nc" id="L34">                    request.getServerId(),</span>
+<span class="nc" id="L35">                    request.getHost(),</span>
+<span class="nc" id="L36">                    request.getPort()</span>
+            );
+
+<span class="nc" id="L39">            RegisterRegionServerResponse response = RegisterRegionServerResponse.newBuilder()</span>
+<span class="nc" id="L40">                    .setSuccess(true)</span>
+<span class="nc" id="L41">                    .setAssignedServerId(assignedId)</span>
+<span class="nc" id="L42">                    .setHeartbeatIntervalMs(clusterManager.getHeartbeatIntervalMs())</span>
+<span class="nc" id="L43">                    .setErrorCode(ErrorCode.ERROR_OK)</span>
+<span class="nc" id="L44">                    .build();</span>
+
+<span class="nc" id="L46">            responseObserver.onNext(response);</span>
+<span class="nc" id="L47">            responseObserver.onCompleted();</span>
+
+<span class="nc" id="L49">        } catch (Exception e) {</span>
+<span class="nc" id="L50">            logger.error(&quot;Failed to register RegionServer&quot;, e);</span>
+
+<span class="nc" id="L52">            RegisterRegionServerResponse response = RegisterRegionServerResponse.newBuilder()</span>
+<span class="nc" id="L53">                    .setSuccess(false)</span>
+<span class="nc" id="L54">                    .setErrorCode(ErrorCode.ERROR_INTERNAL)</span>
+<span class="nc" id="L55">                    .setErrorMessage(&quot;Registration failed: &quot; + e.getMessage())</span>
+<span class="nc" id="L56">                    .build();</span>
+
+<span class="nc" id="L58">            responseObserver.onNext(response);</span>
+<span class="nc" id="L59">            responseObserver.onCompleted();</span>
+<span class="nc" id="L60">        }</span>
+<span class="nc" id="L61">    }</span>
+
+    @Override
+    public void sendHeartbeat(HeartbeatRequest request,
+                             StreamObserver&lt;HeartbeatResponse&gt; responseObserver) {
+<span class="nc" id="L66">        logger.debug(&quot;Received heartbeat from: {}&quot;, request.getServerId());</span>
+
+        try {
+            // 更新心跳
+<span class="nc" id="L70">            boolean success = clusterManager.updateHeartbeat(</span>
+<span class="nc" id="L71">                    request.getServerId(),</span>
+<span class="nc" id="L72">                    request.getMetrics()</span>
+            );
+
+<span class="nc bnc" id="L75" title="All 2 branches missed.">            if (!success) {</span>
+<span class="nc" id="L76">                logger.warn(&quot;Heartbeat failed: server not found: {}&quot;, request.getServerId());</span>
+            }
+
+            // 更新Region列表
+<span class="nc" id="L80">            ServerInfo serverInfo = clusterManager.getServerInfo(request.getServerId());</span>
+<span class="nc bnc" id="L81" title="All 2 branches missed.">            if (serverInfo != null) {</span>
+                // 同步Region列表
+<span class="nc bnc" id="L83" title="All 2 branches missed.">                for (String regionId : request.getRegionIdsList()) {</span>
+<span class="nc bnc" id="L84" title="All 2 branches missed.">                    if (!serverInfo.getRegions().containsKey(regionId)) {</span>
+<span class="nc" id="L85">                        clusterManager.addRegionToServer(request.getServerId(), regionId, 0);</span>
+                    }
+<span class="nc" id="L87">                }</span>
+            }
+
+<span class="nc" id="L90">            HeartbeatResponse response = HeartbeatResponse.newBuilder()</span>
+<span class="nc" id="L91">                    .setAcknowledged(true)</span>
+<span class="nc" id="L92">                    .build();</span>
+
+<span class="nc" id="L94">            responseObserver.onNext(response);</span>
+<span class="nc" id="L95">            responseObserver.onCompleted();</span>
+
+<span class="nc" id="L97">        } catch (Exception e) {</span>
+<span class="nc" id="L98">            logger.error(&quot;Failed to process heartbeat&quot;, e);</span>
+
+<span class="nc" id="L100">            HeartbeatResponse response = HeartbeatResponse.newBuilder()</span>
+<span class="nc" id="L101">                    .setAcknowledged(false)</span>
+<span class="nc" id="L102">                    .build();</span>
+
+<span class="nc" id="L104">            responseObserver.onNext(response);</span>
+<span class="nc" id="L105">            responseObserver.onCompleted();</span>
+<span class="nc" id="L106">        }</span>
+<span class="nc" id="L107">    }</span>
+
+    @Override
+    public void unregisterRegionServer(UnregisterRegionServerRequest request,
+                                       StreamObserver&lt;UnregisterRegionServerResponse&gt; responseObserver) {
+<span class="nc" id="L112">        logger.info(&quot;Received UnregisterRegionServer request from: {}&quot;, request.getServerId());</span>
+
+        try {
+<span class="nc" id="L115">            boolean success = clusterManager.unregisterServer(request.getServerId());</span>
+
+            // 获取需要迁移的Region列表
+<span class="nc" id="L118">            ServerInfo serverInfo = clusterManager.getServerInfo(request.getServerId());</span>
+            UnregisterRegionServerResponse.Builder responseBuilder =
+<span class="nc" id="L120">                    UnregisterRegionServerResponse.newBuilder()</span>
+<span class="nc" id="L121">                    .setSuccess(success);</span>
+
+<span class="nc bnc" id="L123" title="All 2 branches missed.">            if (serverInfo != null) {</span>
+<span class="nc" id="L124">                responseBuilder.addAllRegionsToMigrate(serverInfo.getRegions().keySet());</span>
+            }
+
+<span class="nc" id="L127">            responseObserver.onNext(responseBuilder.build());</span>
+<span class="nc" id="L128">            responseObserver.onCompleted();</span>
+
+<span class="nc" id="L130">        } catch (Exception e) {</span>
+<span class="nc" id="L131">            logger.error(&quot;Failed to unregister RegionServer&quot;, e);</span>
+
+<span class="nc" id="L133">            UnregisterRegionServerResponse response = UnregisterRegionServerResponse.newBuilder()</span>
+<span class="nc" id="L134">                    .setSuccess(false)</span>
+<span class="nc" id="L135">                    .build();</span>
+
+<span class="nc" id="L137">            responseObserver.onNext(response);</span>
+<span class="nc" id="L138">            responseObserver.onCompleted();</span>
+<span class="nc" id="L139">        }</span>
+<span class="nc" id="L140">    }</span>
+
+    @Override
+    public void reportRegionOnline(ReportRegionOnlineRequest request,
+                                   StreamObserver&lt;ReportRegionOnlineResponse&gt; responseObserver) {
+<span class="nc" id="L145">        logger.info(&quot;Region {} is online on server: {}&quot;,</span>
+<span class="nc" id="L146">                   request.getRegionId(), request.getServerId());</span>
+
+        try {
+            // 添加Region到服务器
+<span class="nc" id="L150">            clusterManager.addRegionToServer(</span>
+<span class="nc" id="L151">                    request.getServerId(),</span>
+<span class="nc" id="L152">                    request.getRegionId(),</span>
+<span class="nc" id="L153">                    request.getSizeBytes()</span>
+            );
+
+<span class="nc" id="L156">            ReportRegionOnlineResponse response = ReportRegionOnlineResponse.newBuilder()</span>
+<span class="nc" id="L157">                    .setAcknowledged(true)</span>
+<span class="nc" id="L158">                    .build();</span>
+
+<span class="nc" id="L160">            responseObserver.onNext(response);</span>
+<span class="nc" id="L161">            responseObserver.onCompleted();</span>
+
+<span class="nc" id="L163">        } catch (Exception e) {</span>
+<span class="nc" id="L164">            logger.error(&quot;Failed to report region online&quot;, e);</span>
+
+<span class="nc" id="L166">            ReportRegionOnlineResponse response = ReportRegionOnlineResponse.newBuilder()</span>
+<span class="nc" id="L167">                    .setAcknowledged(false)</span>
+<span class="nc" id="L168">                    .build();</span>
+
+<span class="nc" id="L170">            responseObserver.onNext(response);</span>
+<span class="nc" id="L171">            responseObserver.onCompleted();</span>
+<span class="nc" id="L172">        }</span>
+<span class="nc" id="L173">    }</span>
+
+    @Override
+    public void reportRegionClosed(ReportRegionClosedRequest request,
+                                   StreamObserver&lt;ReportRegionClosedResponse&gt; responseObserver) {
+<span class="nc" id="L178">        logger.info(&quot;Region {} is closed on server: {}&quot;,</span>
+<span class="nc" id="L179">                   request.getRegionId(), request.getServerId());</span>
+
+        try {
+            // 从服务器移除Region
+<span class="nc" id="L183">            clusterManager.removeRegionFromServer(</span>
+<span class="nc" id="L184">                    request.getServerId(),</span>
+<span class="nc" id="L185">                    request.getRegionId()</span>
+            );
+
+<span class="nc" id="L188">            ReportRegionClosedResponse response = ReportRegionClosedResponse.newBuilder()</span>
+<span class="nc" id="L189">                    .setAcknowledged(true)</span>
+<span class="nc" id="L190">                    .build();</span>
+
+<span class="nc" id="L192">            responseObserver.onNext(response);</span>
+<span class="nc" id="L193">            responseObserver.onCompleted();</span>
+
+<span class="nc" id="L195">        } catch (Exception e) {</span>
+<span class="nc" id="L196">            logger.error(&quot;Failed to report region closed&quot;, e);</span>
+
+<span class="nc" id="L198">            ReportRegionClosedResponse response = ReportRegionClosedResponse.newBuilder()</span>
+<span class="nc" id="L199">                    .setAcknowledged(false)</span>
+<span class="nc" id="L200">                    .build();</span>
+
+<span class="nc" id="L202">            responseObserver.onNext(response);</span>
+<span class="nc" id="L203">            responseObserver.onCompleted();</span>
+<span class="nc" id="L204">        }</span>
+<span class="nc" id="L205">    }</span>
+
+    @Override
+    public void reportRegionSplit(ReportRegionSplitRequest request,
+                                  StreamObserver&lt;ReportRegionSplitResponse&gt; responseObserver) {
+<span class="nc" id="L210">        logger.info(&quot;Region {} split reported by server: {}&quot;,</span>
+<span class="nc" id="L211">                   request.getParentRegionId(), request.getServerId());</span>
+
+        // TODO: 实现Region分裂处理逻辑
+<span class="nc" id="L214">        ReportRegionSplitResponse response = ReportRegionSplitResponse.newBuilder()</span>
+<span class="nc" id="L215">                .setAcknowledged(true)</span>
+<span class="nc" id="L216">                .build();</span>
+
+<span class="nc" id="L218">        responseObserver.onNext(response);</span>
+<span class="nc" id="L219">        responseObserver.onCompleted();</span>
+<span class="nc" id="L220">    }</span>
+
+    @Override
+    public void reportMigrationProgress(ReportMigrationProgressRequest request,
+                                       StreamObserver&lt;ReportMigrationProgressResponse&gt; responseObserver) {
+<span class="nc" id="L225">        logger.info(&quot;Migration progress for region {}: phase={}&quot;,</span>
+<span class="nc" id="L226">                   request.getRegionId(), request.getPhase());</span>
+
+        // TODO: 实现迁移进度处理逻辑
+<span class="nc" id="L229">        ReportMigrationProgressResponse response = ReportMigrationProgressResponse.newBuilder()</span>
+<span class="nc" id="L230">                .setAcknowledged(true)</span>
+<span class="nc" id="L231">                .setShouldAbort(false)</span>
+<span class="nc" id="L232">                .build();</span>
+
+<span class="nc" id="L234">        responseObserver.onNext(response);</span>
+<span class="nc" id="L235">        responseObserver.onCompleted();</span>
+<span class="nc" id="L236">    }</span>
+
+    @Override
+    public void reportRegionFailure(ReportRegionFailureRequest request,
+                                    StreamObserver&lt;ReportRegionFailureResponse&gt; responseObserver) {
+<span class="nc" id="L241">        logger.error(&quot;Region failure reported: region={}, type={}, server={}&quot;,</span>
+<span class="nc" id="L242">                    request.getRegionId(), request.getFailureType(), request.getServerId());</span>
+
+        // TODO: 实现故障处理逻辑
+<span class="nc" id="L245">        ReportRegionFailureResponse response = ReportRegionFailureResponse.newBuilder()</span>
+<span class="nc" id="L246">                .setAcknowledged(true)</span>
+<span class="nc" id="L247">                .setAction(ReportRegionFailureResponse.RecoveryAction.NONE)</span>
+<span class="nc" id="L248">                .build();</span>
+
+<span class="nc" id="L250">        responseObserver.onNext(response);</span>
+<span class="nc" id="L251">        responseObserver.onCompleted();</span>
+<span class="nc" id="L252">    }</span>
+
+    @Override
+    public void adminOperation(AdminOperationRequest request,
+                              StreamObserver&lt;AdminOperationResponse&gt; responseObserver) {
+<span class="nc" id="L257">        logger.info(&quot;Admin operation requested by server: {}&quot;, request.getServerId());</span>
+
+        // TODO: 实现管理操作逻辑
+<span class="nc" id="L260">        AdminOperationResponse response = AdminOperationResponse.newBuilder()</span>
+<span class="nc" id="L261">                .setSuccess(false)</span>
+<span class="nc" id="L262">                .setMessage(&quot;Admin operations not implemented yet&quot;)</span>
+<span class="nc" id="L263">                .build();</span>
+
+<span class="nc" id="L265">        responseObserver.onNext(response);</span>
+<span class="nc" id="L266">        responseObserver.onCompleted();</span>
+<span class="nc" id="L267">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

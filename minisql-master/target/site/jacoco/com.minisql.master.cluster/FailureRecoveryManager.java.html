@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FailureRecoveryManager.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">MiniSQL Master</a> &gt; <a href="index.source.html" class="el_package">com.minisql.master.cluster</a> &gt; <span class="el_source">FailureRecoveryManager.java</span></div><h1>FailureRecoveryManager.java</h1><pre class="source lang-java linenums">package com.minisql.master.cluster;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 故障恢复管理器
+ *
+ * 处理RegionServer故障，触发Region重新分配
+ */
+public class FailureRecoveryManager implements HeartbeatMonitor.FailureHandler {
+
+<span class="nc" id="L17">    private static final Logger logger = LoggerFactory.getLogger(FailureRecoveryManager.class);</span>
+
+    private final ClusterManager clusterManager;
+
+    /**
+     * Region重新分配回调接口
+     */
+    public interface RegionReassignmentCallback {
+        /**
+         * 重新分配Region
+         *
+         * @param regionId 需要重新分配的Region ID
+         * @param failedServerId 故障的服务器ID
+         * @param targetServerId 目标服务器ID
+         */
+        void reassignRegion(String regionId, String failedServerId, String targetServerId);
+    }
+
+    private RegionReassignmentCallback reassignmentCallback;
+
+<span class="nc" id="L37">    public FailureRecoveryManager(ClusterManager clusterManager) {</span>
+<span class="nc" id="L38">        this.clusterManager = clusterManager;</span>
+<span class="nc" id="L39">    }</span>
+
+    /**
+     * 设置Region重新分配回调
+     */
+    public void setReassignmentCallback(RegionReassignmentCallback callback) {
+<span class="nc" id="L45">        this.reassignmentCallback = callback;</span>
+<span class="nc" id="L46">    }</span>
+
+    @Override
+    public void handleServerFailure(String serverId) {
+<span class="nc" id="L50">        logger.error(&quot;Handling server failure: {}&quot;, serverId);</span>
+
+<span class="nc" id="L52">        ServerInfo failedServer = clusterManager.getServerInfo(serverId);</span>
+<span class="nc bnc" id="L53" title="All 2 branches missed.">        if (failedServer == null) {</span>
+<span class="nc" id="L54">            logger.warn(&quot;Failed server not found: {}&quot;, serverId);</span>
+<span class="nc" id="L55">            return;</span>
+        }
+
+        // 获取故障服务器上的所有Region
+<span class="nc" id="L59">        Map&lt;String, Long&gt; regions = failedServer.getRegions();</span>
+<span class="nc bnc" id="L60" title="All 2 branches missed.">        if (regions.isEmpty()) {</span>
+<span class="nc" id="L61">            logger.info(&quot;No regions on failed server: {}&quot;, serverId);</span>
+<span class="nc" id="L62">            return;</span>
+        }
+
+<span class="nc" id="L65">        logger.warn(&quot;Server {} has {} regions to reassign&quot;, serverId, regions.size());</span>
+
+        // 选择目标服务器并重新分配Region
+<span class="nc" id="L68">        List&lt;String&gt; failedReassignments = new ArrayList&lt;&gt;();</span>
+
+<span class="nc bnc" id="L70" title="All 2 branches missed.">        for (String regionId : regions.keySet()) {</span>
+            try {
+<span class="nc" id="L72">                ServerInfo targetServer = clusterManager.selectLeastLoadedServer();</span>
+
+<span class="nc bnc" id="L74" title="All 2 branches missed.">                if (targetServer == null) {</span>
+<span class="nc" id="L75">                    logger.error(&quot;No available server for region reassignment: {}&quot;, regionId);</span>
+<span class="nc" id="L76">                    failedReassignments.add(regionId);</span>
+<span class="nc" id="L77">                    continue;</span>
+                }
+
+<span class="nc" id="L80">                logger.info(&quot;Reassigning region {} from {} to {}&quot;,</span>
+<span class="nc" id="L81">                           regionId, serverId, targetServer.getServerId());</span>
+
+                // 触发重新分配回调
+<span class="nc bnc" id="L84" title="All 2 branches missed.">                if (reassignmentCallback != null) {</span>
+<span class="nc" id="L85">                    reassignmentCallback.reassignRegion(</span>
+                            regionId,
+                            serverId,
+<span class="nc" id="L88">                            targetServer.getServerId()</span>
+                    );
+                }
+
+                // 更新集群状态
+<span class="nc" id="L93">                clusterManager.removeRegionFromServer(serverId, regionId);</span>
+<span class="nc" id="L94">                clusterManager.addRegionToServer(</span>
+<span class="nc" id="L95">                        targetServer.getServerId(),</span>
+                        regionId,
+<span class="nc" id="L97">                        regions.get(regionId)</span>
+                );
+
+<span class="nc" id="L100">            } catch (Exception e) {</span>
+<span class="nc" id="L101">                logger.error(&quot;Failed to reassign region: {}&quot;, regionId, e);</span>
+<span class="nc" id="L102">                failedReassignments.add(regionId);</span>
+<span class="nc" id="L103">            }</span>
+<span class="nc" id="L104">        }</span>
+
+<span class="nc bnc" id="L106" title="All 2 branches missed.">        if (!failedReassignments.isEmpty()) {</span>
+<span class="nc" id="L107">            logger.error(&quot;Failed to reassign {} regions: {}&quot;,</span>
+<span class="nc" id="L108">                        failedReassignments.size(), failedReassignments);</span>
+        } else {
+<span class="nc" id="L110">            logger.info(&quot;Successfully reassigned all regions from failed server: {}&quot;, serverId);</span>
+        }
+<span class="nc" id="L112">    }</span>
+
+    /**
+     * 手动触发故障恢复
+     *
+     * @param serverId 服务器ID
+     */
+    public void triggerRecovery(String serverId) {
+<span class="nc" id="L120">        logger.info(&quot;Manually triggering recovery for server: {}&quot;, serverId);</span>
+<span class="nc" id="L121">        handleServerFailure(serverId);</span>
+<span class="nc" id="L122">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

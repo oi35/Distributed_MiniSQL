@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MigrationPlan.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">MiniSQL Master</a> &gt; <a href="index.source.html" class="el_package">com.minisql.master.balance</a> &gt; <span class="el_source">MigrationPlan.java</span></div><h1>MigrationPlan.java</h1><pre class="source lang-java linenums">package com.minisql.master.balance;
+
+/**
+ * 迁移计划
+ * Immutable data model representing a region migration plan.
+ */
+public class MigrationPlan {
+    private final String regionId;
+    private final String sourceServerId;
+    private final String targetServerId;
+    private final double benefit;
+    private final String reason;
+
+    public MigrationPlan(String regionId, String sourceServerId,
+<span class="fc" id="L15">                        String targetServerId, double benefit, String reason) {</span>
+<span class="fc" id="L16">        this.regionId = regionId;</span>
+<span class="fc" id="L17">        this.sourceServerId = sourceServerId;</span>
+<span class="fc" id="L18">        this.targetServerId = targetServerId;</span>
+<span class="fc" id="L19">        this.benefit = benefit;</span>
+<span class="fc" id="L20">        this.reason = reason;</span>
+<span class="fc" id="L21">    }</span>
+
+    public String getRegionId() {
+<span class="fc" id="L24">        return regionId;</span>
+    }
+
+    public String getSourceServerId() {
+<span class="fc" id="L28">        return sourceServerId;</span>
+    }
+
+    public String getTargetServerId() {
+<span class="fc" id="L32">        return targetServerId;</span>
+    }
+
+    public double getBenefit() {
+<span class="fc" id="L36">        return benefit;</span>
+    }
+
+    public String getReason() {
+<span class="fc" id="L40">        return reason;</span>
+    }
+
+    @Override
+    public String toString() {
+<span class="fc" id="L45">        return String.format(&quot;MigrationPlan{region=%s, %s-&gt;%s, benefit=%.2f, reason=%s}&quot;,</span>
+<span class="fc" id="L46">                regionId, sourceServerId, targetServerId, benefit, reason);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

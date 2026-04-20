@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ServerInfo.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">MiniSQL Master</a> &gt; <a href="index.source.html" class="el_package">com.minisql.master.cluster</a> &gt; <span class="el_source">ServerInfo.java</span></div><h1>ServerInfo.java</h1><pre class="source lang-java linenums">package com.minisql.master.cluster;
+
+import com.minisql.common.proto.ServerState;
+import com.minisql.common.proto.ServerMetrics;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.Map;
+
+/**
+ * RegionServer信息
+ *
+ * 封装RegionServer的状态、指标和Region列表
+ */
+public class ServerInfo {
+
+    private final String serverId;
+    private final String host;
+    private final int port;
+    private volatile ServerState state;
+    private volatile long lastHeartbeatTime;
+    private volatile ServerMetrics metrics;
+    private final Map&lt;String, Long&gt; regions; // regionId -&gt; size
+    private final long registrationTime;
+
+<span class="nc" id="L27">    public ServerInfo(String serverId, String host, int port) {</span>
+<span class="nc" id="L28">        this.serverId = serverId;</span>
+<span class="nc" id="L29">        this.host = host;</span>
+<span class="nc" id="L30">        this.port = port;</span>
+<span class="nc" id="L31">        this.state = ServerState.SERVER_ONLINE;</span>
+<span class="nc" id="L32">        this.lastHeartbeatTime = System.currentTimeMillis();</span>
+<span class="nc" id="L33">        this.regions = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="nc" id="L34">        this.registrationTime = System.currentTimeMillis();</span>
+<span class="nc" id="L35">        this.metrics = ServerMetrics.newBuilder().build();</span>
+<span class="nc" id="L36">    }</span>
+
+    /**
+     * 更新心跳时间
+     */
+    public void updateHeartbeat() {
+<span class="nc" id="L42">        this.lastHeartbeatTime = System.currentTimeMillis();</span>
+<span class="nc" id="L43">    }</span>
+
+    /**
+     * 更新心跳时间和指标
+     */
+    public void updateHeartbeat(ServerMetrics metrics) {
+<span class="nc" id="L49">        this.lastHeartbeatTime = System.currentTimeMillis();</span>
+<span class="nc" id="L50">        this.metrics = metrics;</span>
+<span class="nc" id="L51">    }</span>
+
+    /**
+     * 添加Region
+     */
+    public void addRegion(String regionId, long size) {
+<span class="nc" id="L57">        regions.put(regionId, size);</span>
+<span class="nc" id="L58">    }</span>
+
+    /**
+     * 移除Region
+     */
+    public void removeRegion(String regionId) {
+<span class="nc" id="L64">        regions.remove(regionId);</span>
+<span class="nc" id="L65">    }</span>
+
+    /**
+     * 检查是否超时
+     */
+    public boolean isTimeout(long timeoutMs) {
+<span class="nc bnc" id="L71" title="All 2 branches missed.">        return System.currentTimeMillis() - lastHeartbeatTime &gt; timeoutMs;</span>
+    }
+
+    /**
+     * 获取负载分数（用于负载均衡）
+     * 综合考虑Region数量、数据大小、CPU、内存
+     */
+    public double getLoadScore() {
+<span class="nc" id="L79">        double regionScore = regions.size() * 0.5;</span>
+<span class="nc" id="L80">        double sizeScore = (metrics.getTotalSizeBytes() / (1024.0 * 1024 * 1024)) * 0.3;</span>
+<span class="nc" id="L81">        double cpuScore = metrics.getCpuUsage() * 0.1;</span>
+<span class="nc" id="L82">        double memoryScore = metrics.getMemoryUsage() * 0.1;</span>
+<span class="nc" id="L83">        return regionScore + sizeScore + cpuScore + memoryScore;</span>
+    }
+
+    /**
+     * 获取服务器地址
+     */
+    public String getAddress() {
+<span class="nc" id="L90">        return host + &quot;:&quot; + port;</span>
+    }
+
+    // Getters
+
+    public String getServerId() {
+<span class="nc" id="L96">        return serverId;</span>
+    }
+
+    public String getHost() {
+<span class="nc" id="L100">        return host;</span>
+    }
+
+    public int getPort() {
+<span class="nc" id="L104">        return port;</span>
+    }
+
+    public ServerState getState() {
+<span class="nc" id="L108">        return state;</span>
+    }
+
+    public void setState(ServerState state) {
+<span class="nc" id="L112">        this.state = state;</span>
+<span class="nc" id="L113">    }</span>
+
+    public long getLastHeartbeatTime() {
+<span class="nc" id="L116">        return lastHeartbeatTime;</span>
+    }
+
+    public ServerMetrics getMetrics() {
+<span class="nc" id="L120">        return metrics;</span>
+    }
+
+    public Map&lt;String, Long&gt; getRegions() {
+<span class="nc" id="L124">        return new ConcurrentHashMap&lt;&gt;(regions);</span>
+    }
+
+    /**
+     * 获取所有Region的ID列表
+     *
+     * @return Region ID列表的副本
+     */
+    public List&lt;String&gt; getRegionIds() {
+<span class="nc" id="L133">        return new ArrayList&lt;&gt;(regions.keySet());</span>
+    }
+
+    public int getRegionCount() {
+<span class="nc" id="L137">        return regions.size();</span>
+    }
+
+    public long getRegistrationTime() {
+<span class="nc" id="L141">        return registrationTime;</span>
+    }
+
+    @Override
+    public String toString() {
+<span class="nc" id="L146">        return String.format(&quot;ServerInfo{id=%s, address=%s, state=%s, regions=%d, load=%.2f}&quot;,</span>
+<span class="nc" id="L147">                serverId, getAddress(), state, regions.size(), getLoadScore());</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

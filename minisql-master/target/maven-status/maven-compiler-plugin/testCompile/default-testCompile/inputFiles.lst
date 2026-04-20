@@ -1,0 +1,10 @@
+D:\Distributed_MiniSQL\minisql-master\src\test\java\com\minisql\master\balance\LoadBalancerConfigTest.java
+D:\Distributed_MiniSQL\minisql-master\src\test\java\com\minisql\master\balance\MigrationStateTest.java
+D:\Distributed_MiniSQL\minisql-master\src\test\java\com\minisql\master\metadata\MetadataManagerTest.java
+D:\Distributed_MiniSQL\minisql-master\src\test\java\com\minisql\master\balance\LoadBalancerTest.java
+D:\Distributed_MiniSQL\minisql-master\src\test\java\com\minisql\master\zk\ZookeeperClientTest.java
+D:\Distributed_MiniSQL\minisql-master\src\test\java\com\minisql\master\cluster\ClusterManagerTest.java
+D:\Distributed_MiniSQL\minisql-master\src\test\java\com\minisql\master\cluster\ServerInfoTest.java
+D:\Distributed_MiniSQL\minisql-master\src\test\java\com\minisql\master\balance\MigrationTaskTest.java
+D:\Distributed_MiniSQL\minisql-master\src\test\java\com\minisql\master\balance\MigrationExceptionTest.java
+D:\Distributed_MiniSQL\minisql-master\src\test\java\com\minisql\master\balance\MigrationPlanTest.java

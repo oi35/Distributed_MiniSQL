@@ -46,7 +46,7 @@ public class LoadBalancerTest {
     @Test
     public void testStartAsLeader() {
         masterElection = mock(MasterElection.class);
-        when(masterElection.isMaster()).thenReturn(true);
+        when(masterElection.isLeader()).thenReturn(true);
 
         loadBalancer = new LoadBalancer(
             clusterManager, metadataManager, migrationManager, masterElection, config
@@ -59,7 +59,7 @@ public class LoadBalancerTest {
     @Test
     public void testStartAsNonLeader() {
         masterElection = mock(MasterElection.class);
-        when(masterElection.isMaster()).thenReturn(false);
+        when(masterElection.isLeader()).thenReturn(false);
 
         loadBalancer = new LoadBalancer(
             clusterManager, metadataManager, migrationManager, masterElection, config
@@ -72,7 +72,7 @@ public class LoadBalancerTest {
     @Test
     public void testStop() {
         masterElection = mock(MasterElection.class);
-        when(masterElection.isMaster()).thenReturn(true);
+        when(masterElection.isLeader()).thenReturn(true);
 
         loadBalancer = new LoadBalancer(
             clusterManager, metadataManager, migrationManager, masterElection, config
@@ -88,7 +88,7 @@ public class LoadBalancerTest {
     @Test
     public void testStartTwice() {
         masterElection = mock(MasterElection.class);
-        when(masterElection.isMaster()).thenReturn(true);
+        when(masterElection.isLeader()).thenReturn(true);
 
         loadBalancer = new LoadBalancer(
             clusterManager, metadataManager, migrationManager, masterElection, config

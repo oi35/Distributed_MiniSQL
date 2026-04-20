@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RegionMetadata.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">MiniSQL Master</a> &gt; <a href="index.source.html" class="el_package">com.minisql.master.metadata</a> &gt; <span class="el_source">RegionMetadata.java</span></div><h1>RegionMetadata.java</h1><pre class="source lang-java linenums">package com.minisql.master.metadata;
+
+import com.minisql.common.proto.RegionState;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+
+/**
+ * Region元数据
+ *
+ * 封装Region的元数据信息，包括Region ID、所属表、范围、副本等
+ */
+public class RegionMetadata {
+
+    private final String regionId;
+    private final String tableName;
+    private final String startKey;
+    private final String endKey;
+    private final List&lt;String&gt; replicas; // 副本所在的服务器ID列表
+    private volatile String primaryServer; // 主副本所在的服务器ID
+    private volatile RegionState state;
+    private final long createTime;
+    private volatile long updateTime;
+    private volatile int version;
+
+<span class="fc" id="L27">    public RegionMetadata(String regionId, String tableName, String startKey, String endKey) {</span>
+<span class="fc" id="L28">        this.regionId = regionId;</span>
+<span class="fc" id="L29">        this.tableName = tableName;</span>
+<span class="fc" id="L30">        this.startKey = startKey;</span>
+<span class="fc" id="L31">        this.endKey = endKey;</span>
+<span class="fc" id="L32">        this.replicas = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L33">        this.primaryServer = null;</span>
+<span class="fc" id="L34">        this.state = RegionState.REGION_OFFLINE;</span>
+<span class="fc" id="L35">        this.createTime = System.currentTimeMillis();</span>
+<span class="fc" id="L36">        this.updateTime = this.createTime;</span>
+<span class="fc" id="L37">        this.version = 1;</span>
+<span class="fc" id="L38">    }</span>
+
+    /**
+     * 添加副本
+     */
+    public synchronized void addReplica(String serverId) {
+<span class="pc bpc" id="L44" title="1 of 2 branches missed.">        if (!replicas.contains(serverId)) {</span>
+<span class="fc" id="L45">            replicas.add(serverId);</span>
+<span class="fc" id="L46">            updateVersion();</span>
+        }
+<span class="fc" id="L48">    }</span>
+
+    /**
+     * 移除副本
+     */
+    public synchronized void removeReplica(String serverId) {
+<span class="pc bpc" id="L54" title="1 of 2 branches missed.">        if (replicas.remove(serverId)) {</span>
+            // 如果移除的是主副本，清空主副本
+<span class="pc bpc" id="L56" title="1 of 2 branches missed.">            if (serverId.equals(primaryServer)) {</span>
+<span class="nc" id="L57">                primaryServer = null;</span>
+            }
+<span class="fc" id="L59">            updateVersion();</span>
+        }
+<span class="fc" id="L61">    }</span>
+
+    /**
+     * 设置主副本
+     */
+    public synchronized void setPrimaryServer(String serverId) {
+<span class="pc bpc" id="L67" title="1 of 2 branches missed.">        if (!replicas.contains(serverId)) {</span>
+<span class="nc" id="L68">            throw new IllegalArgumentException(&quot;Server &quot; + serverId + &quot; is not a replica&quot;);</span>
+        }
+<span class="fc" id="L70">        this.primaryServer = serverId;</span>
+<span class="fc" id="L71">        updateVersion();</span>
+<span class="fc" id="L72">    }</span>
+
+    /**
+     * 获取所有副本
+     */
+    public synchronized List&lt;String&gt; getReplicas() {
+<span class="fc" id="L78">        return new ArrayList&lt;&gt;(replicas);</span>
+    }
+
+    /**
+     * 检查键是否在Region范围内
+     *
+     * @param key 键
+     * @return 是否在范围内
+     */
+    public boolean containsKey(String key) {
+        // startKey &lt;= key &lt; endKey
+<span class="pc bpc" id="L89" title="1 of 4 branches missed.">        boolean afterStart = startKey.isEmpty() || key.compareTo(startKey) &gt;= 0;</span>
+<span class="fc bfc" id="L90" title="All 4 branches covered.">        boolean beforeEnd = endKey.isEmpty() || key.compareTo(endKey) &lt; 0;</span>
+<span class="pc bpc" id="L91" title="1 of 4 branches missed.">        return afterStart &amp;&amp; beforeEnd;</span>
+    }
+
+    /**
+     * 检查范围是否与Region有交集
+     *
+     * @param rangeStart 范围起始键
+     * @param rangeEnd 范围结束键
+     * @return 是否有交集
+     */
+    public boolean overlapsRange(String rangeStart, String rangeEnd) {
+        // 检查两个范围是否有交集
+        // [startKey, endKey) 与 [rangeStart, rangeEnd) 是否有交集
+
+        // 如果rangeEnd &lt;= startKey，没有交集
+<span class="pc bpc" id="L106" title="2 of 6 branches missed.">        if (!rangeEnd.isEmpty() &amp;&amp; !startKey.isEmpty() &amp;&amp; rangeEnd.compareTo(startKey) &lt;= 0) {</span>
+<span class="nc" id="L107">            return false;</span>
+        }
+
+        // 如果rangeStart &gt;= endKey，没有交集
+<span class="pc bpc" id="L111" title="2 of 6 branches missed.">        if (!rangeStart.isEmpty() &amp;&amp; !endKey.isEmpty() &amp;&amp; rangeStart.compareTo(endKey) &gt;= 0) {</span>
+<span class="nc" id="L112">            return false;</span>
+        }
+
+<span class="fc" id="L115">        return true;</span>
+    }
+
+    /**
+     * 更新版本号
+     */
+    private void updateVersion() {
+<span class="fc" id="L122">        this.version++;</span>
+<span class="fc" id="L123">        this.updateTime = System.currentTimeMillis();</span>
+<span class="fc" id="L124">    }</span>
+
+    // Getters and Setters
+
+    public String getRegionId() {
+<span class="fc" id="L129">        return regionId;</span>
+    }
+
+    public String getTableName() {
+<span class="fc" id="L133">        return tableName;</span>
+    }
+
+    public String getStartKey() {
+<span class="fc" id="L137">        return startKey;</span>
+    }
+
+    public String getEndKey() {
+<span class="fc" id="L141">        return endKey;</span>
+    }
+
+    public String getPrimaryServer() {
+<span class="fc" id="L145">        return primaryServer;</span>
+    }
+
+    public RegionState getState() {
+<span class="fc" id="L149">        return state;</span>
+    }
+
+    public synchronized void setState(RegionState state) {
+<span class="fc" id="L153">        this.state = state;</span>
+<span class="fc" id="L154">        updateVersion();</span>
+<span class="fc" id="L155">    }</span>
+
+    public long getCreateTime() {
+<span class="nc" id="L158">        return createTime;</span>
+    }
+
+    public long getUpdateTime() {
+<span class="nc" id="L162">        return updateTime;</span>
+    }
+
+    public int getVersion() {
+<span class="nc" id="L166">        return version;</span>
+    }
+
+    public int getReplicaCount() {
+<span class="fc" id="L170">        return replicas.size();</span>
+    }
+
+    @Override
+    public boolean equals(Object o) {
+<span class="pc bpc" id="L175" title="1 of 2 branches missed.">        if (this == o) return true;</span>
+<span class="nc bnc" id="L176" title="All 4 branches missed.">        if (o == null || getClass() != o.getClass()) return false;</span>
+<span class="nc" id="L177">        RegionMetadata that = (RegionMetadata) o;</span>
+<span class="nc" id="L178">        return Objects.equals(regionId, that.regionId);</span>
+    }
+
+    @Override
+    public int hashCode() {
+<span class="nc" id="L183">        return Objects.hash(regionId);</span>
+    }
+
+    @Override
+    public String toString() {
+<span class="nc" id="L188">        return String.format(&quot;RegionMetadata{id=%s, table=%s, range=[%s,%s), replicas=%d, primary=%s, state=%s}&quot;,</span>
+<span class="nc" id="L189">                regionId, tableName, startKey, endKey, replicas.size(), primaryServer, state);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>
