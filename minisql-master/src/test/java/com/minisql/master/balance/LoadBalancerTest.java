@@ -7,6 +7,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 public class LoadBalancerTest {
 
@@ -40,5 +41,61 @@ public class LoadBalancerTest {
 
         assertNotNull(loadBalancer);
         assertFalse(loadBalancer.isRunning());
+    }
+
+    @Test
+    public void testStartAsLeader() {
+        masterElection = mock(MasterElection.class);
+        when(masterElection.isMaster()).thenReturn(true);
+
+        loadBalancer = new LoadBalancer(
+            clusterManager, metadataManager, migrationManager, masterElection, config
+        );
+
+        loadBalancer.start();
+        assertTrue(loadBalancer.isRunning());
+    }
+
+    @Test
+    public void testStartAsNonLeader() {
+        masterElection = mock(MasterElection.class);
+        when(masterElection.isMaster()).thenReturn(false);
+
+        loadBalancer = new LoadBalancer(
+            clusterManager, metadataManager, migrationManager, masterElection, config
+        );
+
+        loadBalancer.start();
+        assertFalse(loadBalancer.isRunning());
+    }
+
+    @Test
+    public void testStop() {
+        masterElection = mock(MasterElection.class);
+        when(masterElection.isMaster()).thenReturn(true);
+
+        loadBalancer = new LoadBalancer(
+            clusterManager, metadataManager, migrationManager, masterElection, config
+        );
+
+        loadBalancer.start();
+        assertTrue(loadBalancer.isRunning());
+
+        loadBalancer.stop();
+        assertFalse(loadBalancer.isRunning());
+    }
+
+    @Test
+    public void testStartTwice() {
+        masterElection = mock(MasterElection.class);
+        when(masterElection.isMaster()).thenReturn(true);
+
+        loadBalancer = new LoadBalancer(
+            clusterManager, metadataManager, migrationManager, masterElection, config
+        );
+
+        loadBalancer.start();
+        loadBalancer.start(); // 第二次调用应该无效
+        assertTrue(loadBalancer.isRunning());
     }
 }
