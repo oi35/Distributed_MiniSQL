@@ -124,6 +124,11 @@ public class ServerInfo {
         return new ConcurrentHashMap<>(regions);
     }
 
+    /**
+     * 获取所有Region的ID列表
+     *
+     * @return Region ID列表的副本
+     */
     public List<String> getRegionIds() {
         return new ArrayList<>(regions.keySet());
     }
