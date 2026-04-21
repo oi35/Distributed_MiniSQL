@@ -180,4 +180,55 @@ public class LoadBalancerTest {
         when(server.getState()).thenReturn(ServerState.SERVER_ONLINE);
         return server;
     }
+
+    @Test
+    public void testCanStartNewMigrationWithNoActiveMigrations() {
+        migrationManager = mock(RegionMigrationManager.class);
+        when(migrationManager.getActiveMigrations()).thenReturn(Collections.emptyList());
+
+        loadBalancer = new LoadBalancer(
+            clusterManager, metadataManager, migrationManager, masterElection, config
+        );
+
+        assertTrue(loadBalancer.canStartNewMigration("rs-001"));
+    }
+
+    @Test
+    public void testCanStartNewMigrationWithGlobalLimitReached() {
+        migrationManager = mock(RegionMigrationManager.class);
+        MigrationTask task1 = createMigrationTask("mig-1", "rs-001", "rs-002");
+        MigrationTask task2 = createMigrationTask("mig-2", "rs-003", "rs-004");
+
+        when(migrationManager.getActiveMigrations()).thenReturn(Arrays.asList(task1, task2));
+
+        loadBalancer = new LoadBalancer(
+            clusterManager, metadataManager, migrationManager, masterElection, config
+        );
+
+        assertFalse(loadBalancer.canStartNewMigration("rs-005"));
+    }
+
+    @Test
+    public void testCanStartNewMigrationWithServerAlreadyInvolved() {
+        migrationManager = mock(RegionMigrationManager.class);
+        MigrationTask task = createMigrationTask("mig-1", "rs-001", "rs-002");
+
+        when(migrationManager.getActiveMigrations()).thenReturn(Collections.singletonList(task));
+
+        loadBalancer = new LoadBalancer(
+            clusterManager, metadataManager, migrationManager, masterElection, config
+        );
+
+        assertFalse(loadBalancer.canStartNewMigration("rs-001")); // 作为源
+        assertFalse(loadBalancer.canStartNewMigration("rs-002")); // 作为目标
+        assertTrue(loadBalancer.canStartNewMigration("rs-003"));  // 未参与
+    }
+
+    private MigrationTask createMigrationTask(String migrationId, String sourceId, String targetId) {
+        MigrationTask task = mock(MigrationTask.class);
+        when(task.getMigrationId()).thenReturn(migrationId);
+        when(task.getSourceServerId()).thenReturn(sourceId);
+        when(task.getTargetServerId()).thenReturn(targetId);
+        return task;
+    }
 }

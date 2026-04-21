@@ -168,4 +168,33 @@ public class LoadBalancer {
         double loadDiff = maxLoad - lightest.getLoadScore();
         return loadDiff > avgLoad * config.getMinLoadDiff();
     }
+
+    /**
+     * 检查是否可以启动新的迁移任务
+     *
+     * <p>检查以下条件：
+     * <ul>
+     *   <li>全局并发限制：活跃迁移数 < maxConcurrentMigrations</li>
+     *   <li>服务器级限制：目标服务器未参与任何活跃迁移（作为源或目标）</li>
+     * </ul>
+     *
+     * @param serverId 要检查的服务器ID
+     * @return 如果可以启动新迁移返回true，否则返回false
+     */
+    boolean canStartNewMigration(String serverId) {
+        List<MigrationTask> activeMigrations = migrationManager.getActiveMigrations();
+
+        if (activeMigrations.size() >= config.getMaxConcurrentMigrations()) {
+            return false;
+        }
+
+        for (MigrationTask task : activeMigrations) {
+            if (task.getSourceServerId().equals(serverId) ||
+                task.getTargetServerId().equals(serverId)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }
