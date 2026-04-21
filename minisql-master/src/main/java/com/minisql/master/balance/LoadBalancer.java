@@ -3,6 +3,7 @@ package com.minisql.master.balance;
 import com.minisql.master.cluster.ClusterManager;
 import com.minisql.master.cluster.ServerInfo;
 import com.minisql.master.metadata.MetadataManager;
+import com.minisql.master.metadata.RegionMetadata;
 import com.minisql.master.zk.MasterElection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -196,5 +197,45 @@ public class LoadBalancer {
         }
 
         return true;
+    }
+
+    /**
+     * 估算Region的负载
+     *
+     * @param region Region元数据
+     * @return 负载分数
+     */
+    double estimateRegionLoad(RegionMetadata region) {
+        double countScore = 0.5;
+        double sizeScore = (region.getSizeBytes() / (1024.0 * 1024 * 1024)) * 0.3;
+        return countScore + sizeScore;
+    }
+
+    /**
+     * 计算迁移收益
+     *
+     * @param source 源服务器
+     * @param target 目标服务器
+     * @param region 要迁移的Region
+     * @param avgLoad 平均负载
+     * @return 收益分数（正数表示有收益）
+     */
+    double calculateBenefit(ServerInfo source, ServerInfo target,
+                           RegionMetadata region, double avgLoad) {
+        double regionLoad = estimateRegionLoad(region);
+
+        double sourceAfter = source.getLoadScore() - regionLoad;
+        double targetAfter = target.getLoadScore() + regionLoad;
+
+        double beforeVariance = Math.pow(source.getLoadScore() - avgLoad, 2) +
+                               Math.pow(target.getLoadScore() - avgLoad, 2);
+        double afterVariance = Math.pow(sourceAfter - avgLoad, 2) +
+                              Math.pow(targetAfter - avgLoad, 2);
+
+        double varianceReduction = beforeVariance - afterVariance;
+
+        double migrationCost = region.getSizeBytes() / (1024.0 * 1024 * 1024);
+
+        return varianceReduction - (migrationCost * 0.1);
     }
 }

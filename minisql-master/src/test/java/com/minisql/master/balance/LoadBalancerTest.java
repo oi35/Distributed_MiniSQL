@@ -3,6 +3,7 @@ package com.minisql.master.balance;
 import com.minisql.master.cluster.ClusterManager;
 import com.minisql.master.cluster.ServerInfo;
 import com.minisql.master.metadata.MetadataManager;
+import com.minisql.master.metadata.RegionMetadata;
 import com.minisql.master.zk.MasterElection;
 import com.minisql.common.proto.ServerState;
 import org.junit.Before;
@@ -230,5 +231,36 @@ public class LoadBalancerTest {
         when(task.getSourceServerId()).thenReturn(sourceId);
         when(task.getTargetServerId()).thenReturn(targetId);
         return task;
+    }
+
+    @Test
+    public void testEstimateRegionLoad() {
+        RegionMetadata region = mock(RegionMetadata.class);
+        when(region.getSizeBytes()).thenReturn(2L * 1024 * 1024 * 1024); // 2GB
+
+        loadBalancer = new LoadBalancer(
+            clusterManager, metadataManager, migrationManager, masterElection, config
+        );
+
+        double load = loadBalancer.estimateRegionLoad(region);
+        assertEquals(0.5 + 2.0 * 0.3, load, 0.001); // 0.5 + 0.6 = 1.1
+    }
+
+    @Test
+    public void testCalculateBenefit() {
+        ServerInfo source = createServerWithLoad(3.0, 3);
+        ServerInfo target = createServerWithLoad(1.0, 2);
+        RegionMetadata region = mock(RegionMetadata.class);
+        when(region.getSizeBytes()).thenReturn(1L * 1024 * 1024 * 1024); // 1GB
+
+        loadBalancer = new LoadBalancer(
+            clusterManager, metadataManager, migrationManager, masterElection, config
+        );
+
+        double avgLoad = 2.0;
+        double benefit = loadBalancer.calculateBenefit(source, target, region, avgLoad);
+
+        // 收益应该为正（方差减少）
+        assertTrue(benefit > 0);
     }
 }

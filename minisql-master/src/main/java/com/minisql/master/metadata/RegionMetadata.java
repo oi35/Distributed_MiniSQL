@@ -23,6 +23,7 @@ public class RegionMetadata {
     private final long createTime;
     private volatile long updateTime;
     private volatile int version;
+    private volatile long sizeBytes; // Region大小（字节）
 
     public RegionMetadata(String regionId, String tableName, String startKey, String endKey) {
         this.regionId = regionId;
@@ -35,6 +36,7 @@ public class RegionMetadata {
         this.createTime = System.currentTimeMillis();
         this.updateTime = this.createTime;
         this.version = 1;
+        this.sizeBytes = 0;
     }
 
     /**
@@ -168,6 +170,15 @@ public class RegionMetadata {
 
     public int getReplicaCount() {
         return replicas.size();
+    }
+
+    public long getSizeBytes() {
+        return sizeBytes;
+    }
+
+    public void setSizeBytes(long sizeBytes) {
+        this.sizeBytes = sizeBytes;
+        updateVersion();
     }
 
     @Override
