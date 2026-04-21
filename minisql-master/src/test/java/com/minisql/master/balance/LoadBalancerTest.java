@@ -95,7 +95,17 @@ public class LoadBalancerTest {
         );
 
         loadBalancer.start();
-        loadBalancer.start(); // 第二次调用应该无效
+        loadBalancer.start(); // Second call should have no effect
         assertTrue(loadBalancer.isRunning());
+    }
+
+    @Test
+    public void testStopWithoutStart() {
+        loadBalancer = new LoadBalancer(
+            clusterManager, metadataManager, migrationManager, masterElection, config
+        );
+
+        loadBalancer.stop(); // Should log warning but not fail
+        assertFalse(loadBalancer.isRunning());
     }
 }

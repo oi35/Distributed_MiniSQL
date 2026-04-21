@@ -45,7 +45,15 @@ public class LoadBalancer {
         return running;
     }
 
-    public void start() {
+    /**
+     * 启动LoadBalancer
+     *
+     * <p>只有当前节点是Leader时才会启动。启动后会定期执行负载检查。
+     * 该方法是幂等的，多次调用不会产生副作用。
+     *
+     * @see #stop()
+     */
+    public synchronized void start() {
         if (running) {
             logger.warn("LoadBalancer already running");
             return;
@@ -73,6 +81,13 @@ public class LoadBalancer {
         logger.info("LoadBalancer started, check period: {}ms", config.getCheckPeriodMs());
     }
 
+    /**
+     * 停止LoadBalancer
+     *
+     * <p>优雅地关闭调度器，等待最多10秒。如果超时则强制关闭。
+     *
+     * @see #start()
+     */
     public void stop() {
         if (!running) {
             logger.warn("LoadBalancer not running");
