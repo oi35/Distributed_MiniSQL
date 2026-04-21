@@ -1,0 +1,10 @@
+com\minisql\master\balance\LoadBalancerConfigTest.class
+com\minisql\master\balance\MigrationPlanTest.class
+com\minisql\master\metadata\MetadataManagerTest.class
+com\minisql\master\cluster\ClusterManagerTest.class
+com\minisql\master\balance\LoadBalancerTest.class
+com\minisql\master\cluster\ServerInfoTest.class
+com\minisql\master\balance\MigrationExceptionTest.class
+com\minisql\master\balance\MigrationTaskTest.class
+com\minisql\master\zk\ZookeeperClientTest.class
+com\minisql\master\balance\MigrationStateTest.class

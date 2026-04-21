@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MigrationTask.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">MiniSQL Master</a> &gt; <a href="index.source.html" class="el_package">com.minisql.master.balance</a> &gt; <span class="el_source">MigrationTask.java</span></div><h1>MigrationTask.java</h1><pre class="source lang-java linenums">package com.minisql.master.balance;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * Region迁移任务
+ */
+public class MigrationTask {
+
+    private final String migrationId;
+    private final String regionId;
+    private final String sourceServerId;
+    private final String targetServerId;
+    private volatile MigrationState state;
+    private final long createTime;
+    private volatile long startTime;
+    private volatile long endTime;
+<span class="fc" id="L21">    private final AtomicInteger retryCount = new AtomicInteger(0);</span>
+    private volatile String errorMessage;
+    private final Map&lt;String, Object&gt; metadata;
+
+    public MigrationTask(String migrationId, String regionId,
+<span class="fc" id="L26">                        String sourceServerId, String targetServerId) {</span>
+<span class="fc bfc" id="L27" title="All 8 branches covered.">        if (migrationId == null || regionId == null ||</span>
+            sourceServerId == null || targetServerId == null) {
+<span class="fc" id="L29">            throw new IllegalArgumentException(&quot;Parameters cannot be null&quot;);</span>
+        }
+<span class="fc bfc" id="L31" title="All 2 branches covered.">        if (sourceServerId.equals(targetServerId)) {</span>
+<span class="fc" id="L32">            throw new IllegalArgumentException(&quot;Source and target server cannot be the same&quot;);</span>
+        }
+<span class="fc" id="L34">        this.migrationId = migrationId;</span>
+<span class="fc" id="L35">        this.regionId = regionId;</span>
+<span class="fc" id="L36">        this.sourceServerId = sourceServerId;</span>
+<span class="fc" id="L37">        this.targetServerId = targetServerId;</span>
+<span class="fc" id="L38">        this.state = MigrationState.PENDING;</span>
+<span class="fc" id="L39">        this.createTime = System.currentTimeMillis();</span>
+<span class="fc" id="L40">        this.startTime = 0;</span>
+<span class="fc" id="L41">        this.endTime = 0;</span>
+<span class="fc" id="L42">        this.metadata = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc" id="L43">    }</span>
+
+    public String getMigrationId() {
+<span class="fc" id="L46">        return migrationId;</span>
+    }
+
+    public String getRegionId() {
+<span class="fc" id="L50">        return regionId;</span>
+    }
+
+    public String getSourceServerId() {
+<span class="fc" id="L54">        return sourceServerId;</span>
+    }
+
+    public String getTargetServerId() {
+<span class="fc" id="L58">        return targetServerId;</span>
+    }
+
+    public MigrationState getState() {
+<span class="fc" id="L62">        return state;</span>
+    }
+
+    public void setState(MigrationState state) {
+<span class="fc" id="L66">        this.state = state;</span>
+<span class="fc" id="L67">    }</span>
+
+    public long getCreateTime() {
+<span class="fc" id="L70">        return createTime;</span>
+    }
+
+    public long getStartTime() {
+<span class="nc" id="L74">        return startTime;</span>
+    }
+
+    public void setStartTime(long startTime) {
+<span class="fc" id="L78">        this.startTime = startTime;</span>
+<span class="fc" id="L79">    }</span>
+
+    public long getEndTime() {
+<span class="nc" id="L82">        return endTime;</span>
+    }
+
+    public void setEndTime(long endTime) {
+<span class="fc" id="L86">        this.endTime = endTime;</span>
+<span class="fc" id="L87">    }</span>
+
+    public int getRetryCount() {
+<span class="fc" id="L90">        return retryCount.get();</span>
+    }
+
+    public void incrementRetry() {
+<span class="fc" id="L94">        retryCount.incrementAndGet();</span>
+<span class="fc" id="L95">    }</span>
+
+    public String getErrorMessage() {
+<span class="fc" id="L98">        return errorMessage;</span>
+    }
+
+    public void setErrorMessage(String errorMessage) {
+<span class="nc" id="L102">        this.errorMessage = errorMessage;</span>
+<span class="nc" id="L103">    }</span>
+
+    public Object getMetadata(String key) {
+<span class="fc" id="L106">        return metadata.get(key);</span>
+    }
+
+    public void setMetadata(String key, Object value) {
+<span class="fc" id="L110">        metadata.put(key, value);</span>
+<span class="fc" id="L111">    }</span>
+
+    public Map&lt;String, Object&gt; getAllMetadata() {
+<span class="nc" id="L114">        return new HashMap&lt;&gt;(metadata);</span>
+    }
+
+    public long getDuration() {
+<span class="fc bfc" id="L118" title="All 2 branches covered.">        if (startTime == 0) {</span>
+<span class="fc" id="L119">            return 0;</span>
+        }
+<span class="pc bpc" id="L121" title="1 of 2 branches missed.">        if (endTime == 0) {</span>
+<span class="nc" id="L122">            return System.currentTimeMillis() - startTime;</span>
+        }
+<span class="fc" id="L124">        return endTime - startTime;</span>
+    }
+
+    @Override
+    public String toString() {
+<span class="nc" id="L129">        return String.format(&quot;MigrationTask{id=%s, region=%s, %s-&gt;%s, state=%s, retry=%d}&quot;,</span>
+<span class="nc" id="L130">                migrationId, regionId, sourceServerId, targetServerId, state, retryCount.get());</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

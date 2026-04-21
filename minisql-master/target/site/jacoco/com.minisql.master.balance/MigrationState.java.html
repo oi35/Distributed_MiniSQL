@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MigrationState.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">MiniSQL Master</a> &gt; <a href="index.source.html" class="el_package">com.minisql.master.balance</a> &gt; <span class="el_source">MigrationState.java</span></div><h1>MigrationState.java</h1><pre class="source lang-java linenums">package com.minisql.master.balance;
+
+import java.util.EnumSet;
+import java.util.Set;
+
+/**
+ * Region迁移状态枚举
+ */
+<span class="fc" id="L9">public enum MigrationState {</span>
+<span class="fc" id="L10">    PENDING,              // 等待执行</span>
+<span class="fc" id="L11">    MIGRATING_PREPARE,    // 准备阶段</span>
+<span class="fc" id="L12">    MIGRATING_SYNC,       // 数据同步阶段</span>
+<span class="fc" id="L13">    MIGRATING_SWITCH,     // 切换阶段</span>
+<span class="fc" id="L14">    COMPLETED,            // 完成</span>
+<span class="fc" id="L15">    FAILED,               // 失败</span>
+<span class="fc" id="L16">    CANCELLED,            // 已取消</span>
+<span class="fc" id="L17">    ROLLING_BACK;         // 回滚中</span>
+
+<span class="fc" id="L19">    private static final Set&lt;MigrationState&gt; TERMINAL_STATES =</span>
+<span class="fc" id="L20">        EnumSet.of(COMPLETED, FAILED, CANCELLED);</span>
+
+    /**
+     * 是否为终态
+     */
+    public boolean isTerminal() {
+<span class="fc" id="L26">        return TERMINAL_STATES.contains(this);</span>
+    }
+
+    /**
+     * 是否可以转换到目标状态
+     */
+    public boolean canTransitionTo(MigrationState target) {
+<span class="fc bfc" id="L33" title="All 2 branches covered.">        if (target == null) {</span>
+<span class="fc" id="L34">            return false;</span>
+        }
+<span class="fc bfc" id="L36" title="All 2 branches covered.">        if (this.isTerminal()) {</span>
+<span class="fc" id="L37">            return false;</span>
+        }
+
+<span class="pc bpc" id="L40" title="1 of 6 branches missed.">        switch (this) {</span>
+            case PENDING:
+<span class="fc bfc" id="L42" title="All 4 branches covered.">                return target == MIGRATING_PREPARE || target == CANCELLED;</span>
+            case MIGRATING_PREPARE:
+<span class="fc bfc" id="L44" title="All 6 branches covered.">                return target == MIGRATING_SYNC || target == ROLLING_BACK || target == CANCELLED;</span>
+            case MIGRATING_SYNC:
+<span class="pc bpc" id="L46" title="1 of 6 branches missed.">                return target == MIGRATING_SWITCH || target == ROLLING_BACK || target == CANCELLED;</span>
+            case MIGRATING_SWITCH:
+<span class="pc bpc" id="L48" title="1 of 4 branches missed.">                return target == COMPLETED || target == ROLLING_BACK;</span>
+            case ROLLING_BACK:
+<span class="pc bpc" id="L50" title="1 of 2 branches missed.">                return target == FAILED;</span>
+            default:
+<span class="nc" id="L52">                return false;</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>
