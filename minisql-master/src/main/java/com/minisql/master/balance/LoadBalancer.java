@@ -1,14 +1,18 @@
 package com.minisql.master.balance;
 
 import com.minisql.master.cluster.ClusterManager;
+import com.minisql.master.cluster.ServerInfo;
 import com.minisql.master.metadata.MetadataManager;
 import com.minisql.master.zk.MasterElection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Comparator;
+import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * 负载均衡器
@@ -112,5 +116,56 @@ public class LoadBalancer {
 
     private void checkAndBalance() {
         // Placeholder - will implement in next task
+    }
+
+    /**
+     * 检查是否需要进行负载均衡
+     *
+     * <p>检查以下条件：
+     * <ul>
+     *   <li>至少有2个在线服务器</li>
+     *   <li>存在过载服务器（负载 > 平均负载 * 1.5）</li>
+     *   <li>过载服务器至少有2个Region</li>
+     *   <li>最大负载与最小负载的差值 > 平均负载 * 0.3</li>
+     *   <li>存在最轻负载的服务器</li>
+     * </ul>
+     *
+     * @return 如果需要负载均衡返回true，否则返回false
+     */
+    public boolean needsBalance() {
+        List<ServerInfo> onlineServers = clusterManager.getOnlineServers();
+        if (onlineServers.size() < 2) {
+            return false;
+        }
+
+        double totalLoad = onlineServers.stream()
+            .mapToDouble(ServerInfo::getLoadScore)
+            .sum();
+        double avgLoad = totalLoad / onlineServers.size();
+
+        List<ServerInfo> overloaded = onlineServers.stream()
+            .filter(s -> s.getLoadScore() > avgLoad * config.getLoadThreshold())
+            .filter(s -> s.getRegionCount() >= config.getMinRegionCount())
+            .collect(Collectors.toList());
+
+        if (overloaded.isEmpty()) {
+            return false;
+        }
+
+        ServerInfo lightest = onlineServers.stream()
+            .min(Comparator.comparingDouble(ServerInfo::getLoadScore))
+            .orElse(null);
+
+        if (lightest == null) {
+            return false;
+        }
+
+        double maxLoad = overloaded.stream()
+            .mapToDouble(ServerInfo::getLoadScore)
+            .max()
+            .orElse(0);
+
+        double loadDiff = maxLoad - lightest.getLoadScore();
+        return loadDiff > avgLoad * config.getMinLoadDiff();
     }
 }
