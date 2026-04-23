@@ -155,6 +155,13 @@ public class MasterElection {
     }
 
     /**
+     * 是否是Leader (isLeader is an alias for isMaster)
+     */
+    public boolean isLeader() {
+        return isMaster;
+    }
+
+    /**
      * 获取服务器ID
      */
     public String getServerId() {

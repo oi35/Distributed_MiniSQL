@@ -2,7 +2,16 @@
   "permissions": {
     "allow": [
       "Skill(update-config)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(xargs head *)",
+      "Bash(gh pr create --title 'feat\\(master\\): Phase 1 - Basic Framework Implementation' --body ' *)",
+      "Bash(find minisql-common/src/main/proto -name \"*.proto\" -exec grep -l \"RouteInfo\" {} \\\\;)",
+      "Bash(xmllint --noout pom.xml)",
+      "Bash(cat)",
+      "Read(//tmp/**)",
+      "Bash(gh pr *)"
     ]
   }
 }

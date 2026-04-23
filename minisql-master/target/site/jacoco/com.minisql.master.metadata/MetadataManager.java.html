@@ -1,0 +1,334 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MetadataManager.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">MiniSQL Master</a> &gt; <a href="index.source.html" class="el_package">com.minisql.master.metadata</a> &gt; <span class="el_source">MetadataManager.java</span></div><h1>MetadataManager.java</h1><pre class="source lang-java linenums">package com.minisql.master.metadata;
+
+import com.minisql.common.proto.RegionState;
+import com.minisql.common.proto.TableSchema;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+/**
+ * 元数据管理器
+ *
+ * 管理所有表和Region的元数据，提供CRUD操作
+ */
+public class MetadataManager {
+
+<span class="fc" id="L20">    private static final Logger logger = LoggerFactory.getLogger(MetadataManager.class);</span>
+
+    // 表名 -&gt; TableMetadata
+    private final Map&lt;String, TableMetadata&gt; tables;
+
+    // 路由表
+    private final RouteTable routeTable;
+
+    // 读写锁
+    private final ReadWriteLock lock;
+
+<span class="fc" id="L31">    public MetadataManager() {</span>
+<span class="fc" id="L32">        this.tables = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc" id="L33">        this.routeTable = new RouteTable();</span>
+<span class="fc" id="L34">        this.lock = new ReentrantReadWriteLock();</span>
+<span class="fc" id="L35">    }</span>
+
+    /**
+     * 创建表
+     *
+     * @param tableName 表名
+     * @param schema 表Schema
+     * @param partitionKey 分区键
+     * @return 是否成功
+     */
+    public boolean createTable(String tableName, TableSchema schema, String partitionKey) {
+<span class="fc" id="L46">        lock.writeLock().lock();</span>
+        try {
+<span class="fc bfc" id="L48" title="All 2 branches covered.">            if (tables.containsKey(tableName)) {</span>
+<span class="fc" id="L49">                logger.warn(&quot;Table already exists: {}&quot;, tableName);</span>
+<span class="fc" id="L50">                return false;</span>
+            }
+
+<span class="fc" id="L53">            TableMetadata tableMetadata = new TableMetadata(tableName, schema, partitionKey);</span>
+<span class="fc" id="L54">            tables.put(tableName, tableMetadata);</span>
+
+<span class="fc" id="L56">            logger.info(&quot;Table created: {}&quot;, tableName);</span>
+<span class="fc" id="L57">            return true;</span>
+
+        } finally {
+<span class="fc" id="L60">            lock.writeLock().unlock();</span>
+        }
+    }
+
+    /**
+     * 删除表
+     *
+     * @param tableName 表名
+     * @return 是否成功
+     */
+    public boolean dropTable(String tableName) {
+<span class="fc" id="L71">        lock.writeLock().lock();</span>
+        try {
+<span class="fc" id="L73">            TableMetadata table = tables.remove(tableName);</span>
+<span class="fc bfc" id="L74" title="All 2 branches covered.">            if (table == null) {</span>
+<span class="fc" id="L75">                logger.warn(&quot;Table not found: {}&quot;, tableName);</span>
+<span class="fc" id="L76">                return false;</span>
+            }
+
+            // 删除所有Region
+<span class="fc" id="L80">            List&lt;String&gt; regionIds = table.getRegionIds();</span>
+<span class="pc bpc" id="L81" title="1 of 2 branches missed.">            for (String regionId : regionIds) {</span>
+<span class="nc" id="L82">                routeTable.removeRegion(regionId);</span>
+<span class="nc" id="L83">            }</span>
+
+<span class="fc" id="L85">            logger.info(&quot;Table dropped: {}, {} regions removed&quot;, tableName, regionIds.size());</span>
+<span class="fc" id="L86">            return true;</span>
+
+        } finally {
+<span class="fc" id="L89">            lock.writeLock().unlock();</span>
+        }
+    }
+
+    /**
+     * 获取表元数据
+     *
+     * @param tableName 表名
+     * @return 表元数据，不存在返回null
+     */
+    public TableMetadata getTable(String tableName) {
+<span class="fc" id="L100">        lock.readLock().lock();</span>
+        try {
+<span class="fc" id="L102">            return tables.get(tableName);</span>
+        } finally {
+<span class="fc" id="L104">            lock.readLock().unlock();</span>
+        }
+    }
+
+    /**
+     * 获取所有表名
+     *
+     * @return 表名列表
+     */
+    public List&lt;String&gt; listTables() {
+<span class="fc" id="L114">        lock.readLock().lock();</span>
+        try {
+<span class="fc" id="L116">            return new ArrayList&lt;&gt;(tables.keySet());</span>
+        } finally {
+<span class="fc" id="L118">            lock.readLock().unlock();</span>
+        }
+    }
+
+    /**
+     * 创建Region
+     *
+     * @param regionId Region ID
+     * @param tableName 表名
+     * @param startKey 起始键
+     * @param endKey 结束键
+     * @return 是否成功
+     */
+    public boolean createRegion(String regionId, String tableName, String startKey, String endKey) {
+<span class="fc" id="L132">        lock.writeLock().lock();</span>
+        try {
+<span class="fc" id="L134">            TableMetadata table = tables.get(tableName);</span>
+<span class="fc bfc" id="L135" title="All 2 branches covered.">            if (table == null) {</span>
+<span class="fc" id="L136">                logger.warn(&quot;Table not found: {}&quot;, tableName);</span>
+<span class="fc" id="L137">                return false;</span>
+            }
+
+            // 检查Region是否已存在
+<span class="pc bpc" id="L141" title="1 of 2 branches missed.">            if (routeTable.getRegion(regionId) != null) {</span>
+<span class="nc" id="L142">                logger.warn(&quot;Region already exists: {}&quot;, regionId);</span>
+<span class="nc" id="L143">                return false;</span>
+            }
+
+            // 创建Region元数据
+<span class="fc" id="L147">            RegionMetadata region = new RegionMetadata(regionId, tableName, startKey, endKey);</span>
+<span class="fc" id="L148">            routeTable.addRegion(region);</span>
+
+            // 添加到表的Region列表
+<span class="fc" id="L151">            table.addRegion(regionId);</span>
+
+<span class="fc" id="L153">            logger.info(&quot;Region created: {} for table: {}, range=[{},{})&quot;,</span>
+                       regionId, tableName, startKey, endKey);
+<span class="fc" id="L155">            return true;</span>
+
+        } finally {
+<span class="fc" id="L158">            lock.writeLock().unlock();</span>
+        }
+    }
+
+    /**
+     * 删除Region
+     *
+     * @param regionId Region ID
+     * @return 是否成功
+     */
+    public boolean deleteRegion(String regionId) {
+<span class="fc" id="L169">        lock.writeLock().lock();</span>
+        try {
+<span class="fc" id="L171">            RegionMetadata region = routeTable.getRegion(regionId);</span>
+<span class="pc bpc" id="L172" title="1 of 2 branches missed.">            if (region == null) {</span>
+<span class="nc" id="L173">                logger.warn(&quot;Region not found: {}&quot;, regionId);</span>
+<span class="nc" id="L174">                return false;</span>
+            }
+
+<span class="fc" id="L177">            String tableName = region.getTableName();</span>
+<span class="fc" id="L178">            TableMetadata table = tables.get(tableName);</span>
+<span class="pc bpc" id="L179" title="1 of 2 branches missed.">            if (table != null) {</span>
+<span class="fc" id="L180">                table.removeRegion(regionId);</span>
+            }
+
+<span class="fc" id="L183">            routeTable.removeRegion(regionId);</span>
+
+<span class="fc" id="L185">            logger.info(&quot;Region deleted: {}&quot;, regionId);</span>
+<span class="fc" id="L186">            return true;</span>
+
+        } finally {
+<span class="fc" id="L189">            lock.writeLock().unlock();</span>
+        }
+    }
+
+    /**
+     * 获取Region元数据
+     *
+     * @param regionId Region ID
+     * @return Region元数据，不存在返回null
+     */
+    public RegionMetadata getRegion(String regionId) {
+<span class="fc" id="L200">        return routeTable.getRegion(regionId);</span>
+    }
+
+    /**
+     * 更新Region状态
+     *
+     * @param regionId Region ID
+     * @param state 新状态
+     * @return 是否成功
+     */
+    public boolean updateRegionState(String regionId, RegionState state) {
+<span class="fc" id="L211">        RegionMetadata region = routeTable.getRegion(regionId);</span>
+<span class="pc bpc" id="L212" title="1 of 2 branches missed.">        if (region == null) {</span>
+<span class="nc" id="L213">            logger.warn(&quot;Region not found: {}&quot;, regionId);</span>
+<span class="nc" id="L214">            return false;</span>
+        }
+
+<span class="fc" id="L217">        region.setState(state);</span>
+<span class="fc" id="L218">        logger.debug(&quot;Region state updated: {} -&gt; {}&quot;, regionId, state);</span>
+<span class="fc" id="L219">        return true;</span>
+    }
+
+    /**
+     * 添加Region副本
+     *
+     * @param regionId Region ID
+     * @param serverId 服务器ID
+     * @return 是否成功
+     */
+    public boolean addRegionReplica(String regionId, String serverId) {
+<span class="fc" id="L230">        RegionMetadata region = routeTable.getRegion(regionId);</span>
+<span class="pc bpc" id="L231" title="1 of 2 branches missed.">        if (region == null) {</span>
+<span class="nc" id="L232">            logger.warn(&quot;Region not found: {}&quot;, regionId);</span>
+<span class="nc" id="L233">            return false;</span>
+        }
+
+<span class="fc" id="L236">        region.addReplica(serverId);</span>
+<span class="fc" id="L237">        logger.info(&quot;Replica added: region={}, server={}&quot;, regionId, serverId);</span>
+<span class="fc" id="L238">        return true;</span>
+    }
+
+    /**
+     * 移除Region副本
+     *
+     * @param regionId Region ID
+     * @param serverId 服务器ID
+     * @return 是否成功
+     */
+    public boolean removeRegionReplica(String regionId, String serverId) {
+<span class="fc" id="L249">        RegionMetadata region = routeTable.getRegion(regionId);</span>
+<span class="pc bpc" id="L250" title="1 of 2 branches missed.">        if (region == null) {</span>
+<span class="nc" id="L251">            logger.warn(&quot;Region not found: {}&quot;, regionId);</span>
+<span class="nc" id="L252">            return false;</span>
+        }
+
+<span class="fc" id="L255">        region.removeReplica(serverId);</span>
+<span class="fc" id="L256">        logger.info(&quot;Replica removed: region={}, server={}&quot;, regionId, serverId);</span>
+<span class="fc" id="L257">        return true;</span>
+    }
+
+    /**
+     * 设置Region主副本
+     *
+     * @param regionId Region ID
+     * @param serverId 服务器ID
+     * @return 是否成功
+     */
+    public boolean setRegionPrimary(String regionId, String serverId) {
+<span class="fc" id="L268">        RegionMetadata region = routeTable.getRegion(regionId);</span>
+<span class="pc bpc" id="L269" title="1 of 2 branches missed.">        if (region == null) {</span>
+<span class="nc" id="L270">            logger.warn(&quot;Region not found: {}&quot;, regionId);</span>
+<span class="nc" id="L271">            return false;</span>
+        }
+
+        try {
+<span class="fc" id="L275">            region.setPrimaryServer(serverId);</span>
+<span class="fc" id="L276">            logger.info(&quot;Primary server set: region={}, server={}&quot;, regionId, serverId);</span>
+<span class="fc" id="L277">            return true;</span>
+<span class="nc" id="L278">        } catch (IllegalArgumentException e) {</span>
+<span class="nc" id="L279">            logger.error(&quot;Failed to set primary server: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L280">            return false;</span>
+        }
+    }
+
+    /**
+     * 根据键查找Region
+     *
+     * @param tableName 表名
+     * @param key 键
+     * @return Region元数据，未找到返回null
+     */
+    public RegionMetadata findRegionForKey(String tableName, String key) {
+<span class="fc" id="L292">        return routeTable.findRegionForKey(tableName, key);</span>
+    }
+
+    /**
+     * 根据范围查找Region列表
+     *
+     * @param tableName 表名
+     * @param startKey 起始键
+     * @param endKey 结束键
+     * @return Region列表
+     */
+    public List&lt;RegionMetadata&gt; findRegionsForRange(String tableName, String startKey, String endKey) {
+<span class="fc" id="L304">        return routeTable.findRegionsForRange(tableName, startKey, endKey);</span>
+    }
+
+    /**
+     * 获取表的所有Region
+     *
+     * @param tableName 表名
+     * @return Region列表
+     */
+    public List&lt;RegionMetadata&gt; getTableRegions(String tableName) {
+<span class="fc" id="L314">        return routeTable.getTableRegions(tableName);</span>
+    }
+
+    /**
+     * 获取元数据统计信息
+     *
+     * @return 统计信息映射
+     */
+    public Map&lt;String, Object&gt; getStats() {
+<span class="fc" id="L323">        lock.readLock().lock();</span>
+        try {
+<span class="fc" id="L325">            Map&lt;String, Object&gt; stats = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L326">            stats.put(&quot;tableCount&quot;, tables.size());</span>
+<span class="fc" id="L327">            stats.put(&quot;regionCount&quot;, routeTable.getRegionCount());</span>
+<span class="fc" id="L328">            return stats;</span>
+        } finally {
+<span class="fc" id="L330">            lock.readLock().unlock();</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

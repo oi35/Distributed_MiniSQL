@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ZookeeperClient.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">MiniSQL Master</a> &gt; <a href="index.source.html" class="el_package">com.minisql.master.zk</a> &gt; <span class="el_source">ZookeeperClient.java</span></div><h1>ZookeeperClient.java</h1><pre class="source lang-java linenums">package com.minisql.master.zk;
+
+import org.apache.zookeeper.*;
+import org.apache.zookeeper.data.Stat;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * Zookeeper客户端封装
+ *
+ * 提供连接管理、节点操作等基础功能
+ */
+public class ZookeeperClient {
+
+<span class="fc" id="L21">    private static final Logger logger = LoggerFactory.getLogger(ZookeeperClient.class);</span>
+
+    private final String connectString;
+    private final int sessionTimeout;
+    private ZooKeeper zooKeeper;
+<span class="fc" id="L26">    private final CountDownLatch connectedLatch = new CountDownLatch(1);</span>
+
+<span class="fc" id="L28">    public ZookeeperClient(String connectString, int sessionTimeout) {</span>
+<span class="fc" id="L29">        this.connectString = connectString;</span>
+<span class="fc" id="L30">        this.sessionTimeout = sessionTimeout;</span>
+<span class="fc" id="L31">    }</span>
+
+    /**
+     * 连接到Zookeeper
+     */
+    public void connect() throws IOException, InterruptedException {
+<span class="fc" id="L37">        zooKeeper = new ZooKeeper(connectString, sessionTimeout, new Watcher() {</span>
+            @Override
+            public void process(WatchedEvent event) {
+<span class="nc bnc" id="L40" title="All 2 branches missed.">                if (event.getState() == Event.KeeperState.SyncConnected) {</span>
+<span class="nc" id="L41">                    connectedLatch.countDown();</span>
+<span class="nc" id="L42">                    logger.info(&quot;Connected to Zookeeper: {}&quot;, connectString);</span>
+<span class="nc bnc" id="L43" title="All 2 branches missed.">                } else if (event.getState() == Event.KeeperState.Disconnected) {</span>
+<span class="nc" id="L44">                    logger.warn(&quot;Disconnected from Zookeeper&quot;);</span>
+<span class="nc bnc" id="L45" title="All 2 branches missed.">                } else if (event.getState() == Event.KeeperState.Expired) {</span>
+<span class="nc" id="L46">                    logger.error(&quot;Zookeeper session expired&quot;);</span>
+                }
+<span class="nc" id="L48">            }</span>
+        });
+
+        // 等待连接建立
+<span class="pc bpc" id="L52" title="1 of 2 branches missed.">        if (!connectedLatch.await(sessionTimeout, TimeUnit.MILLISECONDS)) {</span>
+<span class="fc" id="L53">            throw new IOException(&quot;Failed to connect to Zookeeper within timeout&quot;);</span>
+        }
+<span class="nc" id="L55">    }</span>
+
+    /**
+     * 关闭连接
+     */
+    public void close() throws InterruptedException {
+<span class="nc bnc" id="L61" title="All 2 branches missed.">        if (zooKeeper != null) {</span>
+<span class="nc" id="L62">            zooKeeper.close();</span>
+<span class="nc" id="L63">            logger.info(&quot;Zookeeper connection closed&quot;);</span>
+        }
+<span class="nc" id="L65">    }</span>
+
+    /**
+     * 创建节点
+     *
+     * @param path 节点路径
+     * @param data 节点数据
+     * @param createMode 创建模式
+     * @return 创建的节点路径
+     */
+    public String createNode(String path, String data, CreateMode createMode) throws KeeperException, InterruptedException {
+<span class="nc bnc" id="L76" title="All 2 branches missed.">        byte[] bytes = data != null ? data.getBytes(StandardCharsets.UTF_8) : new byte[0];</span>
+<span class="nc" id="L77">        return zooKeeper.create(path, bytes, ZooDefs.Ids.OPEN_ACL_UNSAFE, createMode);</span>
+    }
+
+    /**
+     * 创建持久节点
+     */
+    public String createPersistentNode(String path, String data) throws KeeperException, InterruptedException {
+<span class="nc" id="L84">        return createNode(path, data, CreateMode.PERSISTENT);</span>
+    }
+
+    /**
+     * 创建临时节点
+     */
+    public String createEphemeralNode(String path, String data) throws KeeperException, InterruptedException {
+<span class="nc" id="L91">        return createNode(path, data, CreateMode.EPHEMERAL);</span>
+    }
+
+    /**
+     * 创建临时顺序节点
+     */
+    public String createEphemeralSequentialNode(String path, String data) throws KeeperException, InterruptedException {
+<span class="nc" id="L98">        return createNode(path, data, CreateMode.EPHEMERAL_SEQUENTIAL);</span>
+    }
+
+    /**
+     * 删除节点
+     */
+    public void deleteNode(String path) throws KeeperException, InterruptedException {
+<span class="nc" id="L105">        zooKeeper.delete(path, -1);</span>
+<span class="nc" id="L106">    }</span>
+
+    /**
+     * 检查节点是否存在
+     */
+    public boolean exists(String path) throws KeeperException, InterruptedException {
+<span class="nc bnc" id="L112" title="All 2 branches missed.">        return zooKeeper.exists(path, false) != null;</span>
+    }
+
+    /**
+     * 检查节点是否存在（带监听）
+     */
+    public Stat exists(String path, Watcher watcher) throws KeeperException, InterruptedException {
+<span class="nc" id="L119">        return zooKeeper.exists(path, watcher);</span>
+    }
+
+    /**
+     * 获取节点数据
+     */
+    public String getData(String path) throws KeeperException, InterruptedException {
+<span class="nc" id="L126">        byte[] data = zooKeeper.getData(path, false, null);</span>
+<span class="nc bnc" id="L127" title="All 2 branches missed.">        return data != null ? new String(data, StandardCharsets.UTF_8) : null;</span>
+    }
+
+    /**
+     * 获取节点数据（带监听）
+     */
+    public String getData(String path, Watcher watcher) throws KeeperException, InterruptedException {
+<span class="nc" id="L134">        byte[] data = zooKeeper.getData(path, watcher, null);</span>
+<span class="nc bnc" id="L135" title="All 2 branches missed.">        return data != null ? new String(data, StandardCharsets.UTF_8) : null;</span>
+    }
+
+    /**
+     * 设置节点数据
+     */
+    public void setData(String path, String data) throws KeeperException, InterruptedException {
+<span class="nc bnc" id="L142" title="All 2 branches missed.">        byte[] bytes = data != null ? data.getBytes(StandardCharsets.UTF_8) : new byte[0];</span>
+<span class="nc" id="L143">        zooKeeper.setData(path, bytes, -1);</span>
+<span class="nc" id="L144">    }</span>
+
+    /**
+     * 获取子节点列表
+     */
+    public List&lt;String&gt; getChildren(String path) throws KeeperException, InterruptedException {
+<span class="nc" id="L150">        return zooKeeper.getChildren(path, false);</span>
+    }
+
+    /**
+     * 获取子节点列表（带监听）
+     */
+    public List&lt;String&gt; getChildren(String path, Watcher watcher) throws KeeperException, InterruptedException {
+<span class="nc" id="L157">        return zooKeeper.getChildren(path, watcher);</span>
+    }
+
+    /**
+     * 确保路径存在（递归创建父节点）
+     */
+    public void ensurePath(String path) throws KeeperException, InterruptedException {
+<span class="nc bnc" id="L164" title="All 4 branches missed.">        if (path == null || path.equals(&quot;/&quot;)) {</span>
+<span class="nc" id="L165">            return;</span>
+        }
+
+<span class="nc bnc" id="L168" title="All 2 branches missed.">        if (exists(path)) {</span>
+<span class="nc" id="L169">            return;</span>
+        }
+
+        // 递归创建父节点
+<span class="nc" id="L173">        String parentPath = path.substring(0, path.lastIndexOf('/'));</span>
+<span class="nc bnc" id="L174" title="All 2 branches missed.">        if (!parentPath.isEmpty()) {</span>
+<span class="nc" id="L175">            ensurePath(parentPath);</span>
+        }
+
+        try {
+<span class="nc" id="L179">            createPersistentNode(path, &quot;&quot;);</span>
+<span class="nc" id="L180">            logger.debug(&quot;Created path: {}&quot;, path);</span>
+<span class="nc" id="L181">        } catch (KeeperException.NodeExistsException e) {</span>
+            // 节点已存在，忽略
+<span class="nc" id="L183">        }</span>
+<span class="nc" id="L184">    }</span>
+
+    /**
+     * 获取Zookeeper实例（用于高级操作）
+     */
+    public ZooKeeper getZooKeeper() {
+<span class="nc" id="L190">        return zooKeeper;</span>
+    }
+
+    /**
+     * 检查连接状态
+     */
+    public boolean isConnected() {
+<span class="nc bnc" id="L197" title="All 4 branches missed.">        return zooKeeper != null &amp;&amp; zooKeeper.getState() == ZooKeeper.States.CONNECTED;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

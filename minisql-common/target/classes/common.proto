@@ -1,0 +1,124 @@
+syntax = "proto3";
+
+package minisql.common;
+
+option java_multiple_files = true;
+option java_package = "com.minisql.common.proto";
+option java_outer_classname = "CommonProto";
+
+// ========== 枚举定义 ==========
+
+// RegionServer状态
+enum ServerState {
+  SERVER_STATE_UNSPECIFIED = 0;
+  SERVER_ONLINE = 1;      // 正常运行
+  SERVER_OFFLINE = 2;     // 优雅关闭
+  SERVER_DEAD = 3;        // 故障/超时
+}
+
+// Region状态
+enum RegionState {
+  REGION_STATE_UNSPECIFIED = 0;
+  REGION_OFFLINE = 1;     // 离线
+  REGION_OPENING = 2;     // 正在打开
+  REGION_ONLINE = 3;      // 在线服务
+  REGION_SPLITTING = 4;   // 正在分裂
+  REGION_SPLIT = 5;       // 已分裂（待清理）
+  REGION_MIGRATING = 6;   // 正在迁移
+  REGION_CLOSED = 7;      // 已关闭
+}
+
+// ========== 核心数据结构 ==========
+
+// 表结构定义
+message TableSchema {
+  string table_name = 1;
+  repeated ColumnSchema columns = 2;
+  string primary_key = 3;
+  int64 version = 4;
+  int64 create_time = 5;
+}
+
+// 列结构定义
+message ColumnSchema {
+  string name = 1;
+  string type = 2;           // "BIGINT", "VARCHAR(100)", "DOUBLE", etc.
+  bool nullable = 3;
+  string default_value = 4;
+  string comment = 5;
+}
+
+// Region信息
+message RegionInfo {
+  string region_id = 1;
+  string table_name = 2;
+  bytes start_key = 3;       // 起始键（包含）
+  bytes end_key = 4;         // 结束键（不包含）
+  string primary_server = 5; // 主副本服务器ID
+  repeated string replica_servers = 6; // 副本服务器ID列表
+  RegionState state = 7;
+  int64 size_bytes = 8;
+  int64 row_count = 9;
+  int64 version = 10;        // 版本号（用于乐观锁）
+  int64 create_time = 11;
+  int64 update_time = 12;
+}
+
+// 路由表
+message RegionRouteTable {
+  string table_name = 1;
+  repeated RouteEntry routes = 2;
+  int64 version = 3;
+  int64 update_time = 4;
+}
+
+// 路由条目
+message RouteEntry {
+  string region_id = 1;
+  bytes start_key = 2;
+  bytes end_key = 3;
+  string primary_server = 4;
+  string primary_address = 5;  // host:port
+  repeated string replica_servers = 6;
+  repeated string replica_addresses = 7;
+}
+
+// 服务器指标
+message ServerMetrics {
+  int32 region_count = 1;
+  int64 total_size_bytes = 2;
+  double cpu_usage = 3;       // 0-100
+  double memory_usage = 4;    // 0-100
+  int64 disk_used_bytes = 5;
+  int64 disk_total_bytes = 6;
+  int32 active_connections = 7;
+  int64 qps = 8;              // 每秒查询数
+}
+
+// 错误码
+enum ErrorCode {
+  ERROR_OK = 0;
+  ERROR_UNKNOWN = 1;
+  ERROR_INVALID_ARGUMENT = 2;
+  ERROR_NOT_FOUND = 3;
+  ERROR_ALREADY_EXISTS = 4;
+  ERROR_PERMISSION_DENIED = 5;
+  ERROR_RESOURCE_EXHAUSTED = 6;
+  ERROR_FAILED_PRECONDITION = 7;
+  ERROR_ABORTED = 8;
+  ERROR_OUT_OF_RANGE = 9;
+  ERROR_UNIMPLEMENTED = 10;
+  ERROR_INTERNAL = 11;
+  ERROR_UNAVAILABLE = 12;
+  ERROR_DEADLINE_EXCEEDED = 13;
+
+  // 业务错误码
+  ERROR_REGION_NOT_FOUND = 100;
+  ERROR_REGION_NOT_ONLINE = 101;
+  ERROR_REGION_SPLITTING = 102;
+  ERROR_TABLE_NOT_FOUND = 103;
+  ERROR_TABLE_ALREADY_EXISTS = 104;
+  ERROR_SERVER_NOT_FOUND = 105;
+  ERROR_DUPLICATE_KEY = 106;
+  ERROR_STALE_ROUTE = 107;
+}

@@ -1,0 +1,319 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ---------------------< com.minisql:minisql-master >---------------------
+[INFO] Building MiniSQL Master 1.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- jacoco:0.8.11:prepare-agent (default) @ minisql-master ---
+[INFO] argLine set to -javaagent:C:\\Users\\Jatrawery\\.m2\\repository\\org\\jacoco\\org.jacoco.agent\\0.8.11\\org.jacoco.agent-0.8.11-runtime.jar=destfile=D:\\Distributed_MiniSQL\\minisql-master\\target\\jacoco.exec
+[INFO] 
+[INFO] --- resources:3.4.0:resources (default-resources) @ minisql-master ---
+[INFO] Copying 2 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.11.0:compile (default-compile) @ minisql-master ---
+[INFO] Changes detected - recompiling the module! :source
+[INFO] Compiling 3 source files with javac [debug target 11] to target\classes
+[INFO] -------------------------------------------------------------
+[WARNING] COMPILATION WARNING : 
+[INFO] -------------------------------------------------------------
+[WARNING] 未与 -source 11 一起设置系统模块的位置
+  不设置系统模块的位置可能会导致类文件无法在 JDK 11 上运行
+    建议使用 --release 11 而不是 -source 11 -target 11，因为它会自动设置系统模块的位置
+[INFO] 1 warning
+[INFO] -------------------------------------------------------------
+[INFO] -------------------------------------------------------------
+[ERROR] COMPILATION ERROR : 
+[INFO] -------------------------------------------------------------
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[13,69] 程序包ClientMasterServiceGrpc不存在
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[18,29] 找不到符号
+  符号:   类 CreateTableRequest
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[19,43] 找不到符号
+  符号:   类 CreateTableResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[34,27] 找不到符号
+  符号:   类 DropTableRequest
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[35,41] 找不到符号
+  符号:   类 DropTableResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[50,32] 找不到符号
+  符号:   类 GetTableSchemaRequest
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[51,46] 找不到符号
+  符号:   类 GetTableSchemaResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[66,28] 找不到符号
+  符号:   类 ListTablesRequest
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[67,42] 找不到符号
+  符号:   类 ListTablesResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[79,31] 找不到符号
+  符号:   类 GetRouteTableRequest
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[80,45] 找不到符号
+  符号:   类 GetRouteTableResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[96,32] 找不到符号
+  符号:   类 GetRouteForKeyRequest
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[97,47] 找不到符号
+  符号:   类 GetRouteForKeyResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[113,35] 找不到符号
+  符号:   类 GetRoutesForRangeRequest
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[114,50] 找不到符号
+  符号:   类 GetRoutesForRangeResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[130,34] 找不到符号
+  符号:   类 ReportStaleRouteRequest
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[131,49] 找不到符号
+  符号:   类 ReportStaleRouteResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[145,34] 找不到符号
+  符号:   类 GetClusterHealthRequest
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[146,48] 找不到符号
+  符号:   类 GetClusterHealthResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[163,33] 找不到符号
+  符号:   类 GetClusterStatsRequest
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[164,47] 找不到符号
+  符号:   类 GetClusterStatsResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[3,26] 程序包com.minisql.client.proto不存在
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[17,5] 方法不会覆盖或实现超类型的方法
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[23,9] 找不到符号
+  符号:   类 CreateTableResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[23,40] 找不到符号
+  符号:   变量 CreateTableResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[33,5] 方法不会覆盖或实现超类型的方法
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[39,9] 找不到符号
+  符号:   类 DropTableResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[39,38] 找不到符号
+  符号:   变量 DropTableResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[49,5] 方法不会覆盖或实现超类型的方法
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[55,9] 找不到符号
+  符号:   类 GetTableSchemaResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[55,43] 找不到符号
+  符号:   变量 GetTableSchemaResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[65,5] 方法不会覆盖或实现超类型的方法
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[71,9] 找不到符号
+  符号:   类 ListTablesResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[71,39] 找不到符号
+  符号:   变量 ListTablesResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[78,5] 方法不会覆盖或实现超类型的方法
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[85,9] 找不到符号
+  符号:   类 GetRouteTableResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[85,42] 找不到符号
+  符号:   变量 GetRouteTableResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[95,5] 方法不会覆盖或实现超类型的方法
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[102,9] 找不到符号
+  符号:   类 GetRouteForKeyResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[102,43] 找不到符号
+  符号:   变量 GetRouteForKeyResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[112,5] 方法不会覆盖或实现超类型的方法
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[119,9] 找不到符号
+  符号:   类 GetRoutesForRangeResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[119,46] 找不到符号
+  符号:   变量 GetRoutesForRangeResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[129,5] 方法不会覆盖或实现超类型的方法
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[136,9] 找不到符号
+  符号:   类 ReportStaleRouteResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[136,45] 找不到符号
+  符号:   变量 ReportStaleRouteResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[144,5] 方法不会覆盖或实现超类型的方法
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[150,9] 找不到符号
+  符号:   类 GetClusterHealthResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[151,52] 程序包GetClusterHealthResponse不存在
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[150,45] 找不到符号
+  符号:   变量 GetClusterHealthResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[162,5] 方法不会覆盖或实现超类型的方法
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[168,9] 找不到符号
+  符号:   类 GetClusterStatsResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[168,44] 找不到符号
+  符号:   变量 GetClusterStatsResponse
+  位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/MasterServer.java:[29,17] 对于addService(com.minisql.master.service.ClientMasterServiceImpl), 找不到合适的方法
+    方法 io.grpc.ServerBuilder.addService(io.grpc.ServerServiceDefinition)不适用
+      (参数不匹配; com.minisql.master.service.ClientMasterServiceImpl无法转换为io.grpc.ServerServiceDefinition)
+    方法 io.grpc.ServerBuilder.addService(io.grpc.BindableService)不适用
+      (参数不匹配; com.minisql.master.service.ClientMasterServiceImpl无法转换为io.grpc.BindableService)
+[INFO] 54 errors 
+[INFO] -------------------------------------------------------------
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  3.148 s
+[INFO] Finished at: 2026-04-16T20:45:06+08:00
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.11.0:compile (default-compile) on project minisql-master: Compilation failure: Compilation failure: 
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[13,69] 程序包ClientMasterServiceGrpc不存在
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[18,29] 找不到符号
+[ERROR]   符号:   类 CreateTableRequest
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[19,43] 找不到符号
+[ERROR]   符号:   类 CreateTableResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[34,27] 找不到符号
+[ERROR]   符号:   类 DropTableRequest
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[35,41] 找不到符号
+[ERROR]   符号:   类 DropTableResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[50,32] 找不到符号
+[ERROR]   符号:   类 GetTableSchemaRequest
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[51,46] 找不到符号
+[ERROR]   符号:   类 GetTableSchemaResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[66,28] 找不到符号
+[ERROR]   符号:   类 ListTablesRequest
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[67,42] 找不到符号
+[ERROR]   符号:   类 ListTablesResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[79,31] 找不到符号
+[ERROR]   符号:   类 GetRouteTableRequest
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[80,45] 找不到符号
+[ERROR]   符号:   类 GetRouteTableResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[96,32] 找不到符号
+[ERROR]   符号:   类 GetRouteForKeyRequest
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[97,47] 找不到符号
+[ERROR]   符号:   类 GetRouteForKeyResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[113,35] 找不到符号
+[ERROR]   符号:   类 GetRoutesForRangeRequest
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[114,50] 找不到符号
+[ERROR]   符号:   类 GetRoutesForRangeResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[130,34] 找不到符号
+[ERROR]   符号:   类 ReportStaleRouteRequest
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[131,49] 找不到符号
+[ERROR]   符号:   类 ReportStaleRouteResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[145,34] 找不到符号
+[ERROR]   符号:   类 GetClusterHealthRequest
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[146,48] 找不到符号
+[ERROR]   符号:   类 GetClusterHealthResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[163,33] 找不到符号
+[ERROR]   符号:   类 GetClusterStatsRequest
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[164,47] 找不到符号
+[ERROR]   符号:   类 GetClusterStatsResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[3,26] 程序包com.minisql.client.proto不存在
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[17,5] 方法不会覆盖或实现超类型的方法
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[23,9] 找不到符号
+[ERROR]   符号:   类 CreateTableResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[23,40] 找不到符号
+[ERROR]   符号:   变量 CreateTableResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[33,5] 方法不会覆盖或实现超类型的方法
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[39,9] 找不到符号
+[ERROR]   符号:   类 DropTableResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[39,38] 找不到符号
+[ERROR]   符号:   变量 DropTableResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[49,5] 方法不会覆盖或实现超类型的方法
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[55,9] 找不到符号
+[ERROR]   符号:   类 GetTableSchemaResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[55,43] 找不到符号
+[ERROR]   符号:   变量 GetTableSchemaResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[65,5] 方法不会覆盖或实现超类型的方法
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[71,9] 找不到符号
+[ERROR]   符号:   类 ListTablesResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[71,39] 找不到符号
+[ERROR]   符号:   变量 ListTablesResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[78,5] 方法不会覆盖或实现超类型的方法
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[85,9] 找不到符号
+[ERROR]   符号:   类 GetRouteTableResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[85,42] 找不到符号
+[ERROR]   符号:   变量 GetRouteTableResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[95,5] 方法不会覆盖或实现超类型的方法
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[102,9] 找不到符号
+[ERROR]   符号:   类 GetRouteForKeyResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[102,43] 找不到符号
+[ERROR]   符号:   变量 GetRouteForKeyResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[112,5] 方法不会覆盖或实现超类型的方法
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[119,9] 找不到符号
+[ERROR]   符号:   类 GetRoutesForRangeResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[119,46] 找不到符号
+[ERROR]   符号:   变量 GetRoutesForRangeResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[129,5] 方法不会覆盖或实现超类型的方法
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[136,9] 找不到符号
+[ERROR]   符号:   类 ReportStaleRouteResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[136,45] 找不到符号
+[ERROR]   符号:   变量 ReportStaleRouteResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[144,5] 方法不会覆盖或实现超类型的方法
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[150,9] 找不到符号
+[ERROR]   符号:   类 GetClusterHealthResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[151,52] 程序包GetClusterHealthResponse不存在
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[150,45] 找不到符号
+[ERROR]   符号:   变量 GetClusterHealthResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[162,5] 方法不会覆盖或实现超类型的方法
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[168,9] 找不到符号
+[ERROR]   符号:   类 GetClusterStatsResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[168,44] 找不到符号
+[ERROR]   符号:   变量 GetClusterStatsResponse
+[ERROR]   位置: 类 com.minisql.master.service.ClientMasterServiceImpl
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/MasterServer.java:[29,17] 对于addService(com.minisql.master.service.ClientMasterServiceImpl), 找不到合适的方法
+[ERROR]     方法 io.grpc.ServerBuilder.addService(io.grpc.ServerServiceDefinition)不适用
+[ERROR]       (参数不匹配; com.minisql.master.service.ClientMasterServiceImpl无法转换为io.grpc.ServerServiceDefinition)
+[ERROR]     方法 io.grpc.ServerBuilder.addService(io.grpc.BindableService)不适用
+[ERROR]       (参数不匹配; com.minisql.master.service.ClientMasterServiceImpl无法转换为io.grpc.BindableService)
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException

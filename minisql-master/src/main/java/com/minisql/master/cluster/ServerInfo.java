@@ -3,6 +3,8 @@ package com.minisql.master.cluster;
 import com.minisql.common.proto.ServerState;
 import com.minisql.common.proto.ServerMetrics;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 
@@ -120,6 +122,15 @@ public class ServerInfo {
 
     public Map<String, Long> getRegions() {
         return new ConcurrentHashMap<>(regions);
+    }
+
+    /**
+     * 获取所有Region的ID列表
+     *
+     * @return Region ID列表的副本
+     */
+    public List<String> getRegionIds() {
+        return new ArrayList<>(regions.keySet());
     }
 
     public int getRegionCount() {
