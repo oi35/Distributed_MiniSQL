@@ -1,5 +1,7 @@
 package com.minisql.master.balance;
 
+import java.util.Objects;
+
 /**
  * Configuration for Region migration operations.
  *
@@ -122,6 +124,37 @@ public class MigrationConfig {
      */
     public long getRollbackTimeoutMs() {
         return rollbackTimeoutMs;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        MigrationConfig that = (MigrationConfig) o;
+        return checkPeriodMs == that.checkPeriodMs &&
+               maxRetries == that.maxRetries &&
+               prepareTimeoutMs == that.prepareTimeoutMs &&
+               syncTimeoutMs == that.syncTimeoutMs &&
+               switchTimeoutMs == that.switchTimeoutMs &&
+               rollbackTimeoutMs == that.rollbackTimeoutMs;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(checkPeriodMs, maxRetries, prepareTimeoutMs,
+                           syncTimeoutMs, switchTimeoutMs, rollbackTimeoutMs);
+    }
+
+    @Override
+    public String toString() {
+        return "MigrationConfig{" +
+               "checkPeriodMs=" + checkPeriodMs +
+               ", maxRetries=" + maxRetries +
+               ", prepareTimeoutMs=" + prepareTimeoutMs +
+               ", syncTimeoutMs=" + syncTimeoutMs +
+               ", switchTimeoutMs=" + switchTimeoutMs +
+               ", rollbackTimeoutMs=" + rollbackTimeoutMs +
+               '}';
     }
 
     /**

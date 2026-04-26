@@ -136,4 +136,37 @@ public class MigrationConfigTest {
             .rollbackTimeoutMs(0L)
             .build();
     }
+
+    @Test
+    public void testEquals() {
+        MigrationConfig config1 = MigrationConfig.getDefault();
+        MigrationConfig config2 = MigrationConfig.getDefault();
+        MigrationConfig config3 = MigrationConfig.builder().checkPeriodMs(10000).build();
+
+        assertEquals(config1, config2);
+        assertNotEquals(config1, config3);
+        assertNotEquals(config1, null);
+        assertNotEquals(config1, "not a config");
+    }
+
+    @Test
+    public void testHashCode() {
+        MigrationConfig config1 = MigrationConfig.getDefault();
+        MigrationConfig config2 = MigrationConfig.getDefault();
+
+        assertEquals(config1.hashCode(), config2.hashCode());
+    }
+
+    @Test
+    public void testToString() {
+        MigrationConfig config = MigrationConfig.getDefault();
+        String str = config.toString();
+
+        assertTrue(str.contains("checkPeriodMs=5000"));
+        assertTrue(str.contains("maxRetries=3"));
+        assertTrue(str.contains("prepareTimeoutMs=30000"));
+        assertTrue(str.contains("syncTimeoutMs=300000"));
+        assertTrue(str.contains("switchTimeoutMs=30000"));
+        assertTrue(str.contains("rollbackTimeoutMs=60000"));
+    }
 }
