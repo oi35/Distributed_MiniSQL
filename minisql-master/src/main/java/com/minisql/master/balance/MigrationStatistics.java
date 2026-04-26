@@ -37,9 +37,18 @@ public class MigrationStatistics {
      * @param cancelled number of cancelled tasks
      * @param active number of currently active tasks
      * @param avgDurationMs average duration of completed tasks in milliseconds
+     * @throws IllegalArgumentException if any count value is negative or avgDurationMs is negative
      */
     public MigrationStatistics(int totalSubmitted, int completed, int failed,
                               int cancelled, int active, long avgDurationMs) {
+        if (totalSubmitted < 0 || completed < 0 || failed < 0 ||
+            cancelled < 0 || active < 0) {
+            throw new IllegalArgumentException("All count values must be non-negative");
+        }
+        if (avgDurationMs < 0) {
+            throw new IllegalArgumentException("Average duration must be non-negative");
+        }
+
         this.totalSubmitted = totalSubmitted;
         this.completed = completed;
         this.failed = failed;

@@ -77,4 +77,34 @@ public class MigrationStatisticsTest {
         assertEquals(2, stats.getActive());
         assertEquals(5.0 / 7.0, stats.getSuccessRate(), 0.01);
     }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testInvalidNegativeTotalSubmitted() {
+        new MigrationStatistics(-1, 0, 0, 0, 0, 0);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testInvalidNegativeCompleted() {
+        new MigrationStatistics(10, -1, 0, 0, 0, 0);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testInvalidNegativeFailed() {
+        new MigrationStatistics(10, 5, -1, 0, 0, 0);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testInvalidNegativeCancelled() {
+        new MigrationStatistics(10, 5, 2, -1, 0, 0);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testInvalidNegativeActive() {
+        new MigrationStatistics(10, 5, 2, 1, -1, 0);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testInvalidNegativeDuration() {
+        new MigrationStatistics(10, 5, 2, 1, 2, -1000);
+    }
 }
