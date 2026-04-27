@@ -110,6 +110,10 @@ public class MigrationTask {
         metadata.put(key, value);
     }
 
+    public void removeMetadata(String key) {
+        metadata.remove(key);
+    }
+
     public Map<String, Object> getAllMetadata() {
         return new HashMap<>(metadata);
     }

@@ -1,21 +1,26 @@
 <?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LoadBalancer.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">MiniSQL Master</a> &gt; <a href="index.source.html" class="el_package">com.minisql.master.balance</a> &gt; <span class="el_source">LoadBalancer.java</span></div><h1>LoadBalancer.java</h1><pre class="source lang-java linenums">package com.minisql.master.balance;
 
 import com.minisql.master.cluster.ClusterManager;
+import com.minisql.master.cluster.ServerInfo;
 import com.minisql.master.metadata.MetadataManager;
+import com.minisql.master.metadata.RegionMetadata;
 import com.minisql.master.zk.MasterElection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Comparator;
+import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * 负载均衡器
  */
 public class LoadBalancer {
 
-<span class="fc" id="L18">    private static final Logger logger = LoggerFactory.getLogger(LoadBalancer.class);</span>
+<span class="nc" id="L23">    private static final Logger logger = LoggerFactory.getLogger(LoadBalancer.class);</span>
 
     private final ClusterManager clusterManager;
     private final MetadataManager metadataManager;
@@ -31,72 +36,207 @@ public class LoadBalancer {
                        MetadataManager metadataManager,
                        RegionMigrationManager migrationManager,
                        MasterElection masterElection,
-<span class="fc" id="L34">                       LoadBalancerConfig config) {</span>
-<span class="fc" id="L35">        this.clusterManager = clusterManager;</span>
-<span class="fc" id="L36">        this.metadataManager = metadataManager;</span>
-<span class="fc" id="L37">        this.migrationManager = migrationManager;</span>
-<span class="fc" id="L38">        this.masterElection = masterElection;</span>
-<span class="fc" id="L39">        this.config = config;</span>
-<span class="fc" id="L40">        this.running = false;</span>
-<span class="fc" id="L41">        this.lastBalanceTime = 0;</span>
-<span class="fc" id="L42">    }</span>
+<span class="nc" id="L39">                       LoadBalancerConfig config) {</span>
+<span class="nc" id="L40">        this.clusterManager = clusterManager;</span>
+<span class="nc" id="L41">        this.metadataManager = metadataManager;</span>
+<span class="nc" id="L42">        this.migrationManager = migrationManager;</span>
+<span class="nc" id="L43">        this.masterElection = masterElection;</span>
+<span class="nc" id="L44">        this.config = config;</span>
+<span class="nc" id="L45">        this.running = false;</span>
+<span class="nc" id="L46">        this.lastBalanceTime = 0;</span>
+<span class="nc" id="L47">    }</span>
 
     public boolean isRunning() {
-<span class="fc" id="L45">        return running;</span>
+<span class="nc" id="L50">        return running;</span>
     }
 
-    public void start() {
-<span class="fc bfc" id="L49" title="All 2 branches covered.">        if (running) {</span>
-<span class="fc" id="L50">            logger.warn(&quot;LoadBalancer already running&quot;);</span>
-<span class="fc" id="L51">            return;</span>
+    /**
+     * 启动LoadBalancer
+     *
+     * &lt;p&gt;只有当前节点是Leader时才会启动。启动后会定期执行负载检查。
+     * 该方法是幂等的，多次调用不会产生副作用。
+     *
+     * @see #stop()
+     */
+    public synchronized void start() {
+<span class="nc bnc" id="L62" title="All 2 branches missed.">        if (running) {</span>
+<span class="nc" id="L63">            logger.warn(&quot;LoadBalancer already running&quot;);</span>
+<span class="nc" id="L64">            return;</span>
         }
 
-<span class="fc bfc" id="L54" title="All 2 branches covered.">        if (!masterElection.isLeader()) {</span>
-<span class="fc" id="L55">            logger.warn(&quot;Not the leader, LoadBalancer will not start&quot;);</span>
-<span class="fc" id="L56">            return;</span>
+<span class="nc bnc" id="L67" title="All 2 branches missed.">        if (!masterElection.isLeader()) {</span>
+<span class="nc" id="L68">            logger.warn(&quot;Not the leader, LoadBalancer will not start&quot;);</span>
+<span class="nc" id="L69">            return;</span>
         }
 
-<span class="fc" id="L59">        running = true;</span>
-<span class="fc" id="L60">        scheduler = Executors.newSingleThreadScheduledExecutor(r -&gt; {</span>
-<span class="fc" id="L61">            Thread t = new Thread(r, &quot;load-balancer&quot;);</span>
-<span class="fc" id="L62">            t.setDaemon(true);</span>
-<span class="fc" id="L63">            return t;</span>
+<span class="nc" id="L72">        running = true;</span>
+<span class="nc" id="L73">        scheduler = Executors.newSingleThreadScheduledExecutor(r -&gt; {</span>
+<span class="nc" id="L74">            Thread t = new Thread(r, &quot;load-balancer&quot;);</span>
+<span class="nc" id="L75">            t.setDaemon(true);</span>
+<span class="nc" id="L76">            return t;</span>
         });
 
-<span class="fc" id="L66">        scheduler.scheduleAtFixedRate(</span>
+<span class="nc" id="L79">        scheduler.scheduleAtFixedRate(</span>
             this::checkAndBalance,
-<span class="fc" id="L68">            config.getCheckPeriodMs(),</span>
-<span class="fc" id="L69">            config.getCheckPeriodMs(),</span>
+<span class="nc" id="L81">            config.getCheckPeriodMs(),</span>
+<span class="nc" id="L82">            config.getCheckPeriodMs(),</span>
             TimeUnit.MILLISECONDS
         );
 
-<span class="fc" id="L73">        logger.info(&quot;LoadBalancer started, check period: {}ms&quot;, config.getCheckPeriodMs());</span>
-<span class="fc" id="L74">    }</span>
+<span class="nc" id="L86">        logger.info(&quot;LoadBalancer started, check period: {}ms&quot;, config.getCheckPeriodMs());</span>
+<span class="nc" id="L87">    }</span>
 
+    /**
+     * 停止LoadBalancer
+     *
+     * &lt;p&gt;优雅地关闭调度器，等待最多10秒。如果超时则强制关闭。
+     *
+     * @see #start()
+     */
     public void stop() {
-<span class="pc bpc" id="L77" title="1 of 2 branches missed.">        if (!running) {</span>
-<span class="nc" id="L78">            logger.warn(&quot;LoadBalancer not running&quot;);</span>
-<span class="nc" id="L79">            return;</span>
+<span class="nc bnc" id="L97" title="All 2 branches missed.">        if (!running) {</span>
+<span class="nc" id="L98">            logger.warn(&quot;LoadBalancer not running&quot;);</span>
+<span class="nc" id="L99">            return;</span>
         }
 
-<span class="fc" id="L82">        running = false;</span>
-<span class="pc bpc" id="L83" title="1 of 2 branches missed.">        if (scheduler != null) {</span>
-<span class="fc" id="L84">            scheduler.shutdown();</span>
+<span class="nc" id="L102">        running = false;</span>
+<span class="nc bnc" id="L103" title="All 2 branches missed.">        if (scheduler != null) {</span>
+<span class="nc" id="L104">            scheduler.shutdown();</span>
             try {
-<span class="pc bpc" id="L86" title="1 of 2 branches missed.">                if (!scheduler.awaitTermination(10, TimeUnit.SECONDS)) {</span>
-<span class="nc" id="L87">                    scheduler.shutdownNow();</span>
+<span class="nc bnc" id="L106" title="All 2 branches missed.">                if (!scheduler.awaitTermination(10, TimeUnit.SECONDS)) {</span>
+<span class="nc" id="L107">                    scheduler.shutdownNow();</span>
                 }
-<span class="nc" id="L89">            } catch (InterruptedException e) {</span>
-<span class="nc" id="L90">                scheduler.shutdownNow();</span>
-<span class="nc" id="L91">                Thread.currentThread().interrupt();</span>
-<span class="fc" id="L92">            }</span>
+<span class="nc" id="L109">            } catch (InterruptedException e) {</span>
+<span class="nc" id="L110">                scheduler.shutdownNow();</span>
+<span class="nc" id="L111">                Thread.currentThread().interrupt();</span>
+<span class="nc" id="L112">            }</span>
         }
 
-<span class="fc" id="L95">        logger.info(&quot;LoadBalancer stopped&quot;);</span>
-<span class="fc" id="L96">    }</span>
+<span class="nc" id="L115">        logger.info(&quot;LoadBalancer stopped&quot;);</span>
+<span class="nc" id="L116">    }</span>
 
     private void checkAndBalance() {
         // Placeholder - will implement in next task
-<span class="nc" id="L100">    }</span>
+<span class="nc" id="L120">    }</span>
+
+    /**
+     * 检查是否需要进行负载均衡
+     *
+     * &lt;p&gt;检查以下条件：
+     * &lt;ul&gt;
+     *   &lt;li&gt;至少有2个在线服务器&lt;/li&gt;
+     *   &lt;li&gt;存在过载服务器（负载 &gt; 平均负载 * 1.5）&lt;/li&gt;
+     *   &lt;li&gt;过载服务器至少有2个Region&lt;/li&gt;
+     *   &lt;li&gt;最大负载与最小负载的差值 &gt; 平均负载 * 0.3&lt;/li&gt;
+     *   &lt;li&gt;存在最轻负载的服务器&lt;/li&gt;
+     * &lt;/ul&gt;
+     *
+     * @return 如果需要负载均衡返回true，否则返回false
+     */
+    public boolean needsBalance() {
+<span class="nc" id="L137">        List&lt;ServerInfo&gt; onlineServers = clusterManager.getOnlineServers();</span>
+<span class="nc bnc" id="L138" title="All 2 branches missed.">        if (onlineServers.size() &lt; 2) {</span>
+<span class="nc" id="L139">            return false;</span>
+        }
+
+<span class="nc" id="L142">        double totalLoad = onlineServers.stream()</span>
+<span class="nc" id="L143">            .mapToDouble(ServerInfo::getLoadScore)</span>
+<span class="nc" id="L144">            .sum();</span>
+<span class="nc" id="L145">        double avgLoad = totalLoad / onlineServers.size();</span>
+
+<span class="nc" id="L147">        List&lt;ServerInfo&gt; overloaded = onlineServers.stream()</span>
+<span class="nc bnc" id="L148" title="All 2 branches missed.">            .filter(s -&gt; s.getLoadScore() &gt; avgLoad * config.getLoadThreshold())</span>
+<span class="nc bnc" id="L149" title="All 2 branches missed.">            .filter(s -&gt; s.getRegionCount() &gt;= config.getMinRegionCount())</span>
+<span class="nc" id="L150">            .collect(Collectors.toList());</span>
+
+<span class="nc bnc" id="L152" title="All 2 branches missed.">        if (overloaded.isEmpty()) {</span>
+<span class="nc" id="L153">            return false;</span>
+        }
+
+<span class="nc" id="L156">        ServerInfo lightest = onlineServers.stream()</span>
+<span class="nc" id="L157">            .min(Comparator.comparingDouble(ServerInfo::getLoadScore))</span>
+<span class="nc" id="L158">            .orElse(null);</span>
+
+<span class="nc bnc" id="L160" title="All 2 branches missed.">        if (lightest == null) {</span>
+<span class="nc" id="L161">            return false;</span>
+        }
+
+<span class="nc" id="L164">        double maxLoad = overloaded.stream()</span>
+<span class="nc" id="L165">            .mapToDouble(ServerInfo::getLoadScore)</span>
+<span class="nc" id="L166">            .max()</span>
+<span class="nc" id="L167">            .orElse(0);</span>
+
+<span class="nc" id="L169">        double loadDiff = maxLoad - lightest.getLoadScore();</span>
+<span class="nc bnc" id="L170" title="All 2 branches missed.">        return loadDiff &gt; avgLoad * config.getMinLoadDiff();</span>
+    }
+
+    /**
+     * 检查是否可以启动新的迁移任务
+     *
+     * &lt;p&gt;检查以下条件：
+     * &lt;ul&gt;
+     *   &lt;li&gt;全局并发限制：活跃迁移数 &lt; maxConcurrentMigrations&lt;/li&gt;
+     *   &lt;li&gt;服务器级限制：目标服务器未参与任何活跃迁移（作为源或目标）&lt;/li&gt;
+     * &lt;/ul&gt;
+     *
+     * @param serverId 要检查的服务器ID
+     * @return 如果可以启动新迁移返回true，否则返回false
+     */
+    boolean canStartNewMigration(String serverId) {
+<span class="nc" id="L186">        List&lt;MigrationTask&gt; activeMigrations = migrationManager.getActiveMigrations();</span>
+
+<span class="nc bnc" id="L188" title="All 2 branches missed.">        if (activeMigrations.size() &gt;= config.getMaxConcurrentMigrations()) {</span>
+<span class="nc" id="L189">            return false;</span>
+        }
+
+<span class="nc bnc" id="L192" title="All 2 branches missed.">        for (MigrationTask task : activeMigrations) {</span>
+<span class="nc bnc" id="L193" title="All 2 branches missed.">            if (task.getSourceServerId().equals(serverId) ||</span>
+<span class="nc bnc" id="L194" title="All 2 branches missed.">                task.getTargetServerId().equals(serverId)) {</span>
+<span class="nc" id="L195">                return false;</span>
+            }
+<span class="nc" id="L197">        }</span>
+
+<span class="nc" id="L199">        return true;</span>
+    }
+
+    /**
+     * 估算Region的负载
+     *
+     * @param region Region元数据
+     * @return 负载分数
+     */
+    double estimateRegionLoad(RegionMetadata region) {
+<span class="nc" id="L209">        double countScore = 0.5;</span>
+<span class="nc" id="L210">        double sizeScore = (region.getSizeBytes() / (1024.0 * 1024 * 1024)) * 0.3;</span>
+<span class="nc" id="L211">        return countScore + sizeScore;</span>
+    }
+
+    /**
+     * 计算迁移收益
+     *
+     * @param source 源服务器
+     * @param target 目标服务器
+     * @param region 要迁移的Region
+     * @param avgLoad 平均负载
+     * @return 收益分数（正数表示有收益）
+     */
+    double calculateBenefit(ServerInfo source, ServerInfo target,
+                           RegionMetadata region, double avgLoad) {
+<span class="nc" id="L225">        double regionLoad = estimateRegionLoad(region);</span>
+
+<span class="nc" id="L227">        double sourceAfter = source.getLoadScore() - regionLoad;</span>
+<span class="nc" id="L228">        double targetAfter = target.getLoadScore() + regionLoad;</span>
+
+<span class="nc" id="L230">        double beforeVariance = Math.pow(source.getLoadScore() - avgLoad, 2) +</span>
+<span class="nc" id="L231">                               Math.pow(target.getLoadScore() - avgLoad, 2);</span>
+<span class="nc" id="L232">        double afterVariance = Math.pow(sourceAfter - avgLoad, 2) +</span>
+<span class="nc" id="L233">                              Math.pow(targetAfter - avgLoad, 2);</span>
+
+<span class="nc" id="L235">        double varianceReduction = beforeVariance - afterVariance;</span>
+
+<span class="nc" id="L237">        double migrationCost = region.getSizeBytes() / (1024.0 * 1024 * 1024);</span>
+
+<span class="nc" id="L239">        return varianceReduction - (migrationCost * 0.1);</span>
+    }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

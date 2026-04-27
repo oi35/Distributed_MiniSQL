@@ -315,6 +315,17 @@ public class MetadataManager {
     }
 
     /**
+     * 更新Region位置（主副本）
+     *
+     * @param regionId Region ID
+     * @param serverId 新的主副本服务器ID
+     * @return 是否成功
+     */
+    public boolean updateRegionLocation(String regionId, String serverId) {
+        return setRegionPrimary(regionId, serverId);
+    }
+
+    /**
      * 获取元数据统计信息
      *
      * @return 统计信息映射

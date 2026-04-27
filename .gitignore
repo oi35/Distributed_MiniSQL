@@ -2,3 +2,10 @@
 
 # Project status (local only)
 PROJECT-STATUS.md
+NEXT-SESSION-GUIDE.md
+PHASE5_COMPLETE_REPORT.md
+PROJECT_COMPLETION_REPORT.md
+
+# Maven build artifacts
+target/
+*.dumpstream
