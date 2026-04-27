@@ -30,6 +30,10 @@ public class PrepareHandler implements MigrationStateHandler {
             throw new MigrationException(error);
         }
 
+        if (task.getMetadata("prepareStartTime") == null) {
+            task.setMetadata("prepareStartTime", System.currentTimeMillis());
+        }
+
         try {
             executor.prepareSource(task.getRegionId(), task.getSourceServerId());
             executor.prepareTarget(task.getRegionId(), task.getTargetServerId());
@@ -42,7 +46,11 @@ public class PrepareHandler implements MigrationStateHandler {
     }
 
     private boolean isTimeout(MigrationTask task) {
-        long elapsed = System.currentTimeMillis() - task.getStartTime();
+        Long startTime = (Long) task.getMetadata("prepareStartTime");
+        if (startTime == null) {
+            startTime = task.getStartTime();
+        }
+        long elapsed = System.currentTimeMillis() - startTime;
         return elapsed > config.getPrepareTimeoutMs();
     }
 }

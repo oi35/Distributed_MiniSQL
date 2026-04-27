@@ -32,6 +32,7 @@ public class SyncHandler implements MigrationStateHandler {
         }
 
         if (task.getMetadata(SYNC_STARTED_KEY) == null) {
+            task.setMetadata("syncStartTime", System.currentTimeMillis());
             executor.startSync(task.getRegionId(), task.getSourceServerId(), task.getTargetServerId());
             task.setMetadata(SYNC_STARTED_KEY, true);
             logger.info("Started sync for task {}", task.getMigrationId());
@@ -48,7 +49,11 @@ public class SyncHandler implements MigrationStateHandler {
     }
 
     private boolean isTimeout(MigrationTask task) {
-        long elapsed = System.currentTimeMillis() - task.getStartTime();
+        Long startTime = (Long) task.getMetadata("syncStartTime");
+        if (startTime == null) {
+            startTime = task.getStartTime();
+        }
+        long elapsed = System.currentTimeMillis() - startTime;
         return elapsed > config.getSyncTimeoutMs();
     }
 }

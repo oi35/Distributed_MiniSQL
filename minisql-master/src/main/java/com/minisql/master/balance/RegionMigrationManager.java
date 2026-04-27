@@ -26,6 +26,7 @@ public class RegionMigrationManager {
     private final Map<MigrationState, MigrationStateHandler> handlers = new ConcurrentHashMap<>();
     private ScheduledExecutorService scheduler;
     private volatile boolean running = false;
+    private final java.util.concurrent.atomic.AtomicLong migrationIdCounter = new java.util.concurrent.atomic.AtomicLong(0);
 
     public RegionMigrationManager(ClusterManager clusterManager,
                                  MetadataManager metadataManager,
@@ -111,8 +112,7 @@ public class RegionMigrationManager {
     }
 
     private String generateMigrationId() {
-        return "migration-" + System.currentTimeMillis() + "-" +
-               (int)(Math.random() * 10000);
+        return "migration-" + System.currentTimeMillis() + "-" + migrationIdCounter.incrementAndGet();
     }
 
     private void processTasks() {
@@ -126,60 +126,69 @@ public class RegionMigrationManager {
     }
 
     private void advanceTask(MigrationTask task) {
-        MigrationState currentState = task.getState();
+        synchronized (task) {
+            MigrationState currentState = task.getState();
 
-        if (currentState == MigrationState.PENDING) {
-            task.setState(MigrationState.MIGRATING_PREPARE);
-            task.setStartTime(System.currentTimeMillis());
-            logger.info("Task {} transitioned to MIGRATING_PREPARE", task.getMigrationId());
-            return;
-        }
+            if (currentState == MigrationState.PENDING) {
+                task.setState(MigrationState.MIGRATING_PREPARE);
+                task.setStartTime(System.currentTimeMillis());
+                logger.info("Task {} transitioned to MIGRATING_PREPARE", task.getMigrationId());
+                return;
+            }
 
-        if (currentState == MigrationState.FAILED) {
-            if (shouldRetry(task)) {
-                Long retryTime = (Long) task.getMetadata("retryTime");
-                if (retryTime != null && System.currentTimeMillis() >= retryTime) {
-                    task.setState(MigrationState.PENDING);
-                    logger.info("Retrying task {}, attempt {}", task.getMigrationId(), task.getRetryCount() + 1);
+            if (currentState == MigrationState.FAILED) {
+                if (shouldRetry(task)) {
+                    Long retryTime = (Long) task.getMetadata("retryTime");
+                    if (retryTime != null && System.currentTimeMillis() >= retryTime) {
+                        task.setState(MigrationState.PENDING);
+                        logger.info("Retrying task {}, attempt {}", task.getMigrationId(), task.getRetryCount() + 1);
+                    }
                 }
+                return;
             }
-            return;
-        }
 
-        MigrationStateHandler handler = handlers.get(currentState);
-        if (handler == null) {
-            return;
-        }
-
-        try {
-            MigrationState nextState = handler.handle(task, executor);
-            if (nextState != null && nextState != currentState) {
-                task.setState(nextState);
-                logger.info("Task {} transitioned from {} to {}",
-                    task.getMigrationId(), currentState, nextState);
+            MigrationStateHandler handler = handlers.get(currentState);
+            if (handler == null) {
+                return;
             }
-        } catch (MigrationException e) {
-            logger.error("Task {} failed in state {}: {}",
-                task.getMigrationId(), currentState, e.getMessage());
-            handleFailure(task, e.getMessage());
+
+            try {
+                MigrationState nextState = handler.handle(task, executor);
+                if (nextState != null && nextState != currentState) {
+                    task.setState(nextState);
+                    logger.info("Task {} transitioned from {} to {}",
+                        task.getMigrationId(), currentState, nextState);
+                }
+            } catch (MigrationException e) {
+                logger.error("Task {} failed in state {}: {}",
+                    task.getMigrationId(), currentState, e.getMessage());
+                handleFailure(task, e.getMessage());
+            }
         }
     }
 
     private void handleFailure(MigrationTask task, String errorMessage) {
         task.setErrorMessage(errorMessage);
-        if (shouldRetry(task)) {
-            task.incrementRetry();
-            int retryCount = task.getRetryCount();
-            long retryDelay = getRetryDelay(retryCount);
-            task.setMetadata("retryTime", System.currentTimeMillis() + retryDelay);
-            task.setState(MigrationState.FAILED);
-            logger.info("Task {} will retry in {}ms (attempt {})",
-                task.getMigrationId(), retryDelay, retryCount);
+        MigrationState currentState = task.getState();
+
+        if (currentState != MigrationState.ROLLING_BACK && currentState != MigrationState.FAILED) {
+            if (shouldRetry(task)) {
+                task.incrementRetry();
+                int retryCount = task.getRetryCount();
+                long retryDelay = getRetryDelay(retryCount);
+                task.setMetadata("retryTime", System.currentTimeMillis() + retryDelay);
+                logger.info("Task {} will retry in {}ms after rollback (attempt {})",
+                    task.getMigrationId(), retryDelay, retryCount);
+            }
+            task.setState(MigrationState.ROLLING_BACK);
+            logger.info("Task {} transitioning to ROLLING_BACK", task.getMigrationId());
         } else {
             task.setState(MigrationState.FAILED);
-            task.setEndTime(System.currentTimeMillis());
-            logger.error("Task {} failed permanently after {} retries",
-                task.getMigrationId(), task.getRetryCount());
+            if (!shouldRetry(task)) {
+                task.setEndTime(System.currentTimeMillis());
+                logger.error("Task {} failed permanently after {} retries",
+                    task.getMigrationId(), task.getRetryCount());
+            }
         }
     }
 

@@ -97,6 +97,10 @@ public class MigrationExecutor {
         return true;
     }
 
+    public void cleanupSyncState(String regionId) {
+        syncStartTimes.remove(regionId);
+    }
+
     private void simulateDelay() {
         try {
             Thread.sleep(100 + random.nextInt(400));
