@@ -31,7 +31,7 @@ public class RollbackHandlerTest {
     @Test
     public void testRollbackWithoutRouteUpdate() throws MigrationException {
         MigrationTask task = new MigrationTask("mig-1", "region-1", "server-1", "server-2");
-        task.setState(MigrationState.ROLLING_BACK);
+        task.setStateUnchecked(MigrationState.ROLLING_BACK);
 
         MigrationState nextState = handler.handle(task, executor);
 
@@ -44,7 +44,7 @@ public class RollbackHandlerTest {
     @Test
     public void testRollbackWithRouteUpdate() throws MigrationException {
         MigrationTask task = new MigrationTask("mig-1", "region-1", "server-1", "server-2");
-        task.setState(MigrationState.ROLLING_BACK);
+        task.setStateUnchecked(MigrationState.ROLLING_BACK);
         task.setMetadata("routeUpdated", true);
 
         MigrationState nextState = handler.handle(task, executor);
@@ -59,7 +59,7 @@ public class RollbackHandlerTest {
     @Test
     public void testRollbackWithRouteUpdateFalse() throws MigrationException {
         MigrationTask task = new MigrationTask("mig-1", "region-1", "server-1", "server-2");
-        task.setState(MigrationState.ROLLING_BACK);
+        task.setStateUnchecked(MigrationState.ROLLING_BACK);
         task.setMetadata("routeUpdated", false);
 
         MigrationState nextState = handler.handle(task, executor);
@@ -73,7 +73,7 @@ public class RollbackHandlerTest {
     @Test
     public void testRollbackWithCleanupFailure() throws MigrationException {
         MigrationTask task = new MigrationTask("mig-1", "region-1", "server-1", "server-2");
-        task.setState(MigrationState.ROLLING_BACK);
+        task.setStateUnchecked(MigrationState.ROLLING_BACK);
         task.setMetadata("routeUpdated", true);
 
         doThrow(new MigrationException("Cleanup failed"))
@@ -89,7 +89,7 @@ public class RollbackHandlerTest {
     @Test
     public void testRollbackWithRestoreFailure() throws MigrationException {
         MigrationTask task = new MigrationTask("mig-1", "region-1", "server-1", "server-2");
-        task.setState(MigrationState.ROLLING_BACK);
+        task.setStateUnchecked(MigrationState.ROLLING_BACK);
 
         doThrow(new MigrationException("Restore failed"))
             .when(executor).restoreSource("region-1", "server-1");
@@ -104,7 +104,7 @@ public class RollbackHandlerTest {
     @Test
     public void testRollbackAlwaysReturnsFailed() throws MigrationException {
         MigrationTask task = new MigrationTask("mig-1", "region-1", "server-1", "server-2");
-        task.setState(MigrationState.ROLLING_BACK);
+        task.setStateUnchecked(MigrationState.ROLLING_BACK);
 
         MigrationState nextState = handler.handle(task, executor);
 

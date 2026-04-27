@@ -30,7 +30,7 @@ public class SwitchHandlerTest {
     @Test
     public void testSuccessfulSwitch() throws MigrationException {
         MigrationTask task = new MigrationTask("mig-001", "region-001", "rs-001", "rs-002");
-        task.setState(MigrationState.MIGRATING_SWITCH);
+        task.setStateUnchecked(MigrationState.MIGRATING_SWITCH);
 
         when(metadataManager.updateRegionLocation("region-001", "rs-002")).thenReturn(true);
         when(executor.activateRegion("region-001", "rs-002")).thenReturn(true);
@@ -48,7 +48,7 @@ public class SwitchHandlerTest {
     @Test
     public void testUpdateRouteFailure() throws MigrationException {
         MigrationTask task = new MigrationTask("mig-001", "region-001", "rs-001", "rs-002");
-        task.setState(MigrationState.MIGRATING_SWITCH);
+        task.setStateUnchecked(MigrationState.MIGRATING_SWITCH);
 
         when(metadataManager.updateRegionLocation("region-001", "rs-002")).thenReturn(false);
 
@@ -61,7 +61,7 @@ public class SwitchHandlerTest {
     @Test
     public void testActivateRegionFailure() throws MigrationException {
         MigrationTask task = new MigrationTask("mig-001", "region-001", "rs-001", "rs-002");
-        task.setState(MigrationState.MIGRATING_SWITCH);
+        task.setStateUnchecked(MigrationState.MIGRATING_SWITCH);
 
         when(metadataManager.updateRegionLocation("region-001", "rs-002")).thenReturn(true);
         when(executor.activateRegion("region-001", "rs-002"))
@@ -79,7 +79,7 @@ public class SwitchHandlerTest {
     @Test
     public void testDeactivateRegionFailure() throws MigrationException {
         MigrationTask task = new MigrationTask("mig-001", "region-001", "rs-001", "rs-002");
-        task.setState(MigrationState.MIGRATING_SWITCH);
+        task.setStateUnchecked(MigrationState.MIGRATING_SWITCH);
 
         when(metadataManager.updateRegionLocation("region-001", "rs-002")).thenReturn(true);
         when(executor.activateRegion("region-001", "rs-002")).thenReturn(true);

@@ -99,7 +99,7 @@ public class RegionMigrationManagerTest {
         MigrationTask task = manager.getTask(migrationId);
 
         task.incrementRetry();
-        task.setState(MigrationState.FAILED);
+        task.setStateUnchecked(MigrationState.FAILED);
         task.setMetadata("retryTime", System.currentTimeMillis() - 100);
 
         Thread.sleep(250);
@@ -156,8 +156,8 @@ public class RegionMigrationManagerTest {
         String id2 = manager.submitMigration("region-2", "rs-2", "rs-3");
         String id3 = manager.submitMigration("region-3", "rs-3", "rs-4");
 
-        manager.getTask(id1).setState(MigrationState.COMPLETED);
-        manager.getTask(id2).setState(MigrationState.FAILED);
+        manager.getTask(id1).setStateUnchecked(MigrationState.COMPLETED);
+        manager.getTask(id2).setStateUnchecked(MigrationState.FAILED);
 
         List<MigrationTask> pending = manager.getTasksByState(MigrationState.PENDING);
         assertEquals(1, pending.size());
@@ -204,7 +204,7 @@ public class RegionMigrationManagerTest {
     public void testCancelMigrationAlreadyCompleted() {
         String id = manager.submitMigration("region-1", "rs-1", "rs-2");
         MigrationTask task = manager.getTask(id);
-        task.setState(MigrationState.COMPLETED);
+        task.setStateUnchecked(MigrationState.COMPLETED);
 
         assertFalse(manager.cancelMigration(id));
         assertEquals(MigrationState.COMPLETED, task.getState());
@@ -219,7 +219,7 @@ public class RegionMigrationManagerTest {
     public void testRetryMigration() {
         String id = manager.submitMigration("region-1", "rs-1", "rs-2");
         MigrationTask task = manager.getTask(id);
-        task.setState(MigrationState.FAILED);
+        task.setStateUnchecked(MigrationState.FAILED);
         task.setErrorMessage("Test error");
         task.setMetadata("retryTime", 12345L);
 
@@ -249,20 +249,20 @@ public class RegionMigrationManagerTest {
         String id5 = manager.submitMigration("region-5", "rs-5", "rs-6");
 
         MigrationTask task1 = manager.getTask(id1);
-        task1.setState(MigrationState.COMPLETED);
+        task1.setStateUnchecked(MigrationState.COMPLETED);
         task1.setStartTime(1000);
         task1.setEndTime(3000);
 
         MigrationTask task2 = manager.getTask(id2);
-        task2.setState(MigrationState.COMPLETED);
+        task2.setStateUnchecked(MigrationState.COMPLETED);
         task2.setStartTime(2000);
         task2.setEndTime(6000);
 
         MigrationTask task3 = manager.getTask(id3);
-        task3.setState(MigrationState.FAILED);
+        task3.setStateUnchecked(MigrationState.FAILED);
 
         MigrationTask task4 = manager.getTask(id4);
-        task4.setState(MigrationState.CANCELLED);
+        task4.setStateUnchecked(MigrationState.CANCELLED);
 
         MigrationStatistics stats = manager.getStatistics();
         assertEquals(5, stats.getTotalSubmitted());
