@@ -86,11 +86,107 @@ public class RegionMigrationManager {
 
     public List<MigrationTask> getActiveMigrations() {
         return migrations.values().stream()
-            .filter(task -> !task.getState().isTerminal())
+            .filter(task -> !task.getState().isTerminal() ||
+                   (task.getState() == MigrationState.FAILED && shouldRetry(task)))
             .collect(Collectors.toList());
     }
 
+    public String submitMigration(String regionId, String sourceServerId, String targetServerId) {
+        if (regionId == null || sourceServerId == null || targetServerId == null) {
+            throw new IllegalArgumentException("Parameters cannot be null");
+        }
+        if (sourceServerId.equals(targetServerId)) {
+            throw new IllegalArgumentException("Source and target server cannot be the same");
+        }
+        String migrationId = generateMigrationId();
+        MigrationTask task = new MigrationTask(migrationId, regionId, sourceServerId, targetServerId);
+        migrations.put(migrationId, task);
+        logger.info("Migration submitted: {}", task);
+        return migrationId;
+    }
+
+    public MigrationTask getTask(String migrationId) {
+        return migrations.get(migrationId);
+    }
+
+    private String generateMigrationId() {
+        return "migration-" + System.currentTimeMillis() + "-" +
+               (int)(Math.random() * 10000);
+    }
+
     private void processTasks() {
-        // Empty for now, will implement in Task 4.3
+        for (MigrationTask task : getActiveMigrations()) {
+            try {
+                advanceTask(task);
+            } catch (Exception e) {
+                logger.error("Error processing task {}: {}", task.getMigrationId(), e.getMessage(), e);
+            }
+        }
+    }
+
+    private void advanceTask(MigrationTask task) {
+        MigrationState currentState = task.getState();
+
+        if (currentState == MigrationState.PENDING) {
+            task.setState(MigrationState.MIGRATING_PREPARE);
+            task.setStartTime(System.currentTimeMillis());
+            logger.info("Task {} transitioned to MIGRATING_PREPARE", task.getMigrationId());
+            return;
+        }
+
+        if (currentState == MigrationState.FAILED) {
+            if (shouldRetry(task)) {
+                Long retryTime = (Long) task.getMetadata("retryTime");
+                if (retryTime != null && System.currentTimeMillis() >= retryTime) {
+                    task.setState(MigrationState.PENDING);
+                    logger.info("Retrying task {}, attempt {}", task.getMigrationId(), task.getRetryCount() + 1);
+                }
+            }
+            return;
+        }
+
+        MigrationStateHandler handler = handlers.get(currentState);
+        if (handler == null) {
+            return;
+        }
+
+        try {
+            MigrationState nextState = handler.handle(task, executor);
+            if (nextState != null && nextState != currentState) {
+                task.setState(nextState);
+                logger.info("Task {} transitioned from {} to {}",
+                    task.getMigrationId(), currentState, nextState);
+            }
+        } catch (MigrationException e) {
+            logger.error("Task {} failed in state {}: {}",
+                task.getMigrationId(), currentState, e.getMessage());
+            handleFailure(task, e.getMessage());
+        }
+    }
+
+    private void handleFailure(MigrationTask task, String errorMessage) {
+        task.setErrorMessage(errorMessage);
+        if (shouldRetry(task)) {
+            task.incrementRetry();
+            int retryCount = task.getRetryCount();
+            long retryDelay = getRetryDelay(retryCount);
+            task.setMetadata("retryTime", System.currentTimeMillis() + retryDelay);
+            task.setState(MigrationState.FAILED);
+            logger.info("Task {} will retry in {}ms (attempt {})",
+                task.getMigrationId(), retryDelay, retryCount);
+        } else {
+            task.setState(MigrationState.FAILED);
+            task.setEndTime(System.currentTimeMillis());
+            logger.error("Task {} failed permanently after {} retries",
+                task.getMigrationId(), task.getRetryCount());
+        }
+    }
+
+    private boolean shouldRetry(MigrationTask task) {
+        return task.getRetryCount() < config.getMaxRetries();
+    }
+
+    private long getRetryDelay(int retryCount) {
+        return 60000 * (1L << retryCount);
     }
 }
