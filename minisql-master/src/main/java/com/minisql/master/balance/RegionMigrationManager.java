@@ -5,6 +5,7 @@ import com.minisql.master.metadata.MetadataManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
@@ -188,5 +189,73 @@ public class RegionMigrationManager {
 
     private long getRetryDelay(int retryCount) {
         return 60000 * (1L << retryCount);
+    }
+
+    public List<MigrationTask> getAllTasks() {
+        return new ArrayList<>(migrations.values());
+    }
+
+    public List<MigrationTask> getTasksByState(MigrationState state) {
+        return migrations.values().stream()
+            .filter(task -> task.getState() == state)
+            .collect(Collectors.toList());
+    }
+
+    public List<MigrationTask> getTasksByServer(String serverId) {
+        return migrations.values().stream()
+            .filter(task -> task.getSourceServerId().equals(serverId) ||
+                           task.getTargetServerId().equals(serverId))
+            .collect(Collectors.toList());
+    }
+
+    public boolean cancelMigration(String migrationId) {
+        MigrationTask task = migrations.get(migrationId);
+        if (task == null || task.getState().isTerminal()) {
+            return false;
+        }
+        task.setState(MigrationState.CANCELLED);
+        task.setEndTime(System.currentTimeMillis());
+        return true;
+    }
+
+    public boolean retryMigration(String migrationId) {
+        MigrationTask task = migrations.get(migrationId);
+        if (task == null || task.getState() != MigrationState.FAILED) {
+            return false;
+        }
+        task.setState(MigrationState.PENDING);
+        task.setErrorMessage(null);
+        task.removeMetadata("retryTime");
+        return true;
+    }
+
+    public MigrationStatistics getStatistics() {
+        int total = migrations.size();
+        int completed = 0;
+        int failed = 0;
+        int cancelled = 0;
+        int active = 0;
+        long totalDuration = 0;
+        int completedCount = 0;
+
+        for (MigrationTask task : migrations.values()) {
+            MigrationState state = task.getState();
+            if (state == MigrationState.COMPLETED) {
+                completed++;
+                if (task.getStartTime() > 0 && task.getEndTime() > 0) {
+                    totalDuration += task.getEndTime() - task.getStartTime();
+                    completedCount++;
+                }
+            } else if (state == MigrationState.FAILED) {
+                failed++;
+            } else if (state == MigrationState.CANCELLED) {
+                cancelled++;
+            } else {
+                active++;
+            }
+        }
+
+        long avgDuration = completedCount > 0 ? totalDuration / completedCount : 0;
+        return new MigrationStatistics(total, completed, failed, cancelled, active, avgDuration);
     }
 }

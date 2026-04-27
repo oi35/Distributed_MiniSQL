@@ -23,59 +23,61 @@ public class RegionMetadata {
     private final long createTime;
     private volatile long updateTime;
     private volatile int version;
+    private volatile long sizeBytes; // Region大小（字节）
 
-<span class="fc" id="L27">    public RegionMetadata(String regionId, String tableName, String startKey, String endKey) {</span>
-<span class="fc" id="L28">        this.regionId = regionId;</span>
-<span class="fc" id="L29">        this.tableName = tableName;</span>
-<span class="fc" id="L30">        this.startKey = startKey;</span>
-<span class="fc" id="L31">        this.endKey = endKey;</span>
-<span class="fc" id="L32">        this.replicas = new ArrayList&lt;&gt;();</span>
-<span class="fc" id="L33">        this.primaryServer = null;</span>
-<span class="fc" id="L34">        this.state = RegionState.REGION_OFFLINE;</span>
-<span class="fc" id="L35">        this.createTime = System.currentTimeMillis();</span>
-<span class="fc" id="L36">        this.updateTime = this.createTime;</span>
-<span class="fc" id="L37">        this.version = 1;</span>
-<span class="fc" id="L38">    }</span>
+<span class="nc" id="L28">    public RegionMetadata(String regionId, String tableName, String startKey, String endKey) {</span>
+<span class="nc" id="L29">        this.regionId = regionId;</span>
+<span class="nc" id="L30">        this.tableName = tableName;</span>
+<span class="nc" id="L31">        this.startKey = startKey;</span>
+<span class="nc" id="L32">        this.endKey = endKey;</span>
+<span class="nc" id="L33">        this.replicas = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L34">        this.primaryServer = null;</span>
+<span class="nc" id="L35">        this.state = RegionState.REGION_OFFLINE;</span>
+<span class="nc" id="L36">        this.createTime = System.currentTimeMillis();</span>
+<span class="nc" id="L37">        this.updateTime = this.createTime;</span>
+<span class="nc" id="L38">        this.version = 1;</span>
+<span class="nc" id="L39">        this.sizeBytes = 0;</span>
+<span class="nc" id="L40">    }</span>
 
     /**
      * 添加副本
      */
     public synchronized void addReplica(String serverId) {
-<span class="pc bpc" id="L44" title="1 of 2 branches missed.">        if (!replicas.contains(serverId)) {</span>
-<span class="fc" id="L45">            replicas.add(serverId);</span>
-<span class="fc" id="L46">            updateVersion();</span>
+<span class="nc bnc" id="L46" title="All 2 branches missed.">        if (!replicas.contains(serverId)) {</span>
+<span class="nc" id="L47">            replicas.add(serverId);</span>
+<span class="nc" id="L48">            updateVersion();</span>
         }
-<span class="fc" id="L48">    }</span>
+<span class="nc" id="L50">    }</span>
 
     /**
      * 移除副本
      */
     public synchronized void removeReplica(String serverId) {
-<span class="pc bpc" id="L54" title="1 of 2 branches missed.">        if (replicas.remove(serverId)) {</span>
+<span class="nc bnc" id="L56" title="All 2 branches missed.">        if (replicas.remove(serverId)) {</span>
             // 如果移除的是主副本，清空主副本
-<span class="pc bpc" id="L56" title="1 of 2 branches missed.">            if (serverId.equals(primaryServer)) {</span>
-<span class="nc" id="L57">                primaryServer = null;</span>
+<span class="nc bnc" id="L58" title="All 2 branches missed.">            if (serverId.equals(primaryServer)) {</span>
+<span class="nc" id="L59">                primaryServer = null;</span>
             }
-<span class="fc" id="L59">            updateVersion();</span>
+<span class="nc" id="L61">            updateVersion();</span>
         }
-<span class="fc" id="L61">    }</span>
+<span class="nc" id="L63">    }</span>
 
     /**
      * 设置主副本
      */
     public synchronized void setPrimaryServer(String serverId) {
-<span class="pc bpc" id="L67" title="1 of 2 branches missed.">        if (!replicas.contains(serverId)) {</span>
-<span class="nc" id="L68">            throw new IllegalArgumentException(&quot;Server &quot; + serverId + &quot; is not a replica&quot;);</span>
+<span class="nc bnc" id="L69" title="All 2 branches missed.">        if (!replicas.contains(serverId)) {</span>
+<span class="nc" id="L70">            throw new IllegalArgumentException(&quot;Server &quot; + serverId + &quot; is not a replica&quot;);</span>
         }
-<span class="fc" id="L70">        this.primaryServer = serverId;</span>
-<span class="fc" id="L71">        updateVersion();</span>
-<span class="fc" id="L72">    }</span>
+<span class="nc" id="L72">        this.primaryServer = serverId;</span>
+<span class="nc" id="L73">        updateVersion();</span>
+<span class="nc" id="L74">    }</span>
 
     /**
      * 获取所有副本
      */
     public synchronized List&lt;String&gt; getReplicas() {
-<span class="fc" id="L78">        return new ArrayList&lt;&gt;(replicas);</span>
+<span class="nc" id="L80">        return new ArrayList&lt;&gt;(replicas);</span>
     }
 
     /**
@@ -86,9 +88,9 @@ public class RegionMetadata {
      */
     public boolean containsKey(String key) {
         // startKey &lt;= key &lt; endKey
-<span class="pc bpc" id="L89" title="1 of 4 branches missed.">        boolean afterStart = startKey.isEmpty() || key.compareTo(startKey) &gt;= 0;</span>
-<span class="fc bfc" id="L90" title="All 4 branches covered.">        boolean beforeEnd = endKey.isEmpty() || key.compareTo(endKey) &lt; 0;</span>
-<span class="pc bpc" id="L91" title="1 of 4 branches missed.">        return afterStart &amp;&amp; beforeEnd;</span>
+<span class="nc bnc" id="L91" title="All 4 branches missed.">        boolean afterStart = startKey.isEmpty() || key.compareTo(startKey) &gt;= 0;</span>
+<span class="nc bnc" id="L92" title="All 4 branches missed.">        boolean beforeEnd = endKey.isEmpty() || key.compareTo(endKey) &lt; 0;</span>
+<span class="nc bnc" id="L93" title="All 4 branches missed.">        return afterStart &amp;&amp; beforeEnd;</span>
     }
 
     /**
@@ -103,90 +105,99 @@ public class RegionMetadata {
         // [startKey, endKey) 与 [rangeStart, rangeEnd) 是否有交集
 
         // 如果rangeEnd &lt;= startKey，没有交集
-<span class="pc bpc" id="L106" title="2 of 6 branches missed.">        if (!rangeEnd.isEmpty() &amp;&amp; !startKey.isEmpty() &amp;&amp; rangeEnd.compareTo(startKey) &lt;= 0) {</span>
-<span class="nc" id="L107">            return false;</span>
+<span class="nc bnc" id="L108" title="All 6 branches missed.">        if (!rangeEnd.isEmpty() &amp;&amp; !startKey.isEmpty() &amp;&amp; rangeEnd.compareTo(startKey) &lt;= 0) {</span>
+<span class="nc" id="L109">            return false;</span>
         }
 
         // 如果rangeStart &gt;= endKey，没有交集
-<span class="pc bpc" id="L111" title="2 of 6 branches missed.">        if (!rangeStart.isEmpty() &amp;&amp; !endKey.isEmpty() &amp;&amp; rangeStart.compareTo(endKey) &gt;= 0) {</span>
-<span class="nc" id="L112">            return false;</span>
+<span class="nc bnc" id="L113" title="All 6 branches missed.">        if (!rangeStart.isEmpty() &amp;&amp; !endKey.isEmpty() &amp;&amp; rangeStart.compareTo(endKey) &gt;= 0) {</span>
+<span class="nc" id="L114">            return false;</span>
         }
 
-<span class="fc" id="L115">        return true;</span>
+<span class="nc" id="L117">        return true;</span>
     }
 
     /**
      * 更新版本号
      */
     private void updateVersion() {
-<span class="fc" id="L122">        this.version++;</span>
-<span class="fc" id="L123">        this.updateTime = System.currentTimeMillis();</span>
-<span class="fc" id="L124">    }</span>
+<span class="nc" id="L124">        this.version++;</span>
+<span class="nc" id="L125">        this.updateTime = System.currentTimeMillis();</span>
+<span class="nc" id="L126">    }</span>
 
     // Getters and Setters
 
     public String getRegionId() {
-<span class="fc" id="L129">        return regionId;</span>
+<span class="nc" id="L131">        return regionId;</span>
     }
 
     public String getTableName() {
-<span class="fc" id="L133">        return tableName;</span>
+<span class="nc" id="L135">        return tableName;</span>
     }
 
     public String getStartKey() {
-<span class="fc" id="L137">        return startKey;</span>
+<span class="nc" id="L139">        return startKey;</span>
     }
 
     public String getEndKey() {
-<span class="fc" id="L141">        return endKey;</span>
+<span class="nc" id="L143">        return endKey;</span>
     }
 
     public String getPrimaryServer() {
-<span class="fc" id="L145">        return primaryServer;</span>
+<span class="nc" id="L147">        return primaryServer;</span>
     }
 
     public RegionState getState() {
-<span class="fc" id="L149">        return state;</span>
+<span class="nc" id="L151">        return state;</span>
     }
 
     public synchronized void setState(RegionState state) {
-<span class="fc" id="L153">        this.state = state;</span>
-<span class="fc" id="L154">        updateVersion();</span>
-<span class="fc" id="L155">    }</span>
+<span class="nc" id="L155">        this.state = state;</span>
+<span class="nc" id="L156">        updateVersion();</span>
+<span class="nc" id="L157">    }</span>
 
     public long getCreateTime() {
-<span class="nc" id="L158">        return createTime;</span>
+<span class="nc" id="L160">        return createTime;</span>
     }
 
     public long getUpdateTime() {
-<span class="nc" id="L162">        return updateTime;</span>
+<span class="nc" id="L164">        return updateTime;</span>
     }
 
     public int getVersion() {
-<span class="nc" id="L166">        return version;</span>
+<span class="nc" id="L168">        return version;</span>
     }
 
     public int getReplicaCount() {
-<span class="fc" id="L170">        return replicas.size();</span>
+<span class="nc" id="L172">        return replicas.size();</span>
     }
+
+    public long getSizeBytes() {
+<span class="nc" id="L176">        return sizeBytes;</span>
+    }
+
+    public void setSizeBytes(long sizeBytes) {
+<span class="nc" id="L180">        this.sizeBytes = sizeBytes;</span>
+<span class="nc" id="L181">        updateVersion();</span>
+<span class="nc" id="L182">    }</span>
 
     @Override
     public boolean equals(Object o) {
-<span class="pc bpc" id="L175" title="1 of 2 branches missed.">        if (this == o) return true;</span>
-<span class="nc bnc" id="L176" title="All 4 branches missed.">        if (o == null || getClass() != o.getClass()) return false;</span>
-<span class="nc" id="L177">        RegionMetadata that = (RegionMetadata) o;</span>
-<span class="nc" id="L178">        return Objects.equals(regionId, that.regionId);</span>
+<span class="nc bnc" id="L186" title="All 2 branches missed.">        if (this == o) return true;</span>
+<span class="nc bnc" id="L187" title="All 4 branches missed.">        if (o == null || getClass() != o.getClass()) return false;</span>
+<span class="nc" id="L188">        RegionMetadata that = (RegionMetadata) o;</span>
+<span class="nc" id="L189">        return Objects.equals(regionId, that.regionId);</span>
     }
 
     @Override
     public int hashCode() {
-<span class="nc" id="L183">        return Objects.hash(regionId);</span>
+<span class="nc" id="L194">        return Objects.hash(regionId);</span>
     }
 
     @Override
     public String toString() {
-<span class="nc" id="L188">        return String.format(&quot;RegionMetadata{id=%s, table=%s, range=[%s,%s), replicas=%d, primary=%s, state=%s}&quot;,</span>
-<span class="nc" id="L189">                regionId, tableName, startKey, endKey, replicas.size(), primaryServer, state);</span>
+<span class="nc" id="L199">        return String.format(&quot;RegionMetadata{id=%s, table=%s, range=[%s,%s), replicas=%d, primary=%s, state=%s}&quot;,</span>
+<span class="nc" id="L200">                regionId, tableName, startKey, endKey, replicas.size(), primaryServer, state);</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

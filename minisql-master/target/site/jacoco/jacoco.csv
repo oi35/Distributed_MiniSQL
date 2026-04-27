@@ -3,15 +3,24 @@ MiniSQL Master,com.minisql.master.balance,LoadBalancerConfig,0,48,0,0,0,16,0,8,0
 MiniSQL Master,com.minisql.master.balance,MigrationState,5,122,4,28,1,22,4,17,0,3
 MiniSQL Master,com.minisql.master.balance,MigrationPlan,0,64,0,0,0,14,0,7,0,7
 MiniSQL Master,com.minisql.master.balance,MigrationException,0,29,0,0,0,11,0,5,0,5
-MiniSQL Master,com.minisql.master.balance,LoadBalancer,16,108,3,7,7,35,4,8,1,6
-MiniSQL Master,com.minisql.master.balance,MigrationTask,58,132,1,13,8,39,6,22,5,16
-MiniSQL Master,com.minisql.master.balance,RegionMigrationManager,3,0,0,0,1,0,1,0,1,0
+MiniSQL Master,com.minisql.master.balance,SwitchHandler,0,56,0,0,0,15,0,4,0,4
+MiniSQL Master,com.minisql.master.balance,MigrationExecutor,9,205,1,5,3,54,1,15,0,13
+MiniSQL Master,com.minisql.master.balance,MigrationConfig.Builder,0,140,0,12,0,34,0,15,0,9
+MiniSQL Master,com.minisql.master.balance,MigrationConfig,2,161,6,12,0,23,6,15,0,12
+MiniSQL Master,com.minisql.master.balance,LoadBalancer,332,0,30,0,88,0,28,0,13,0
+MiniSQL Master,com.minisql.master.balance,MigrationStatistics,2,184,6,26,0,28,6,21,0,11
+MiniSQL Master,com.minisql.master.balance,MigrationTask,42,154,9,5,9,40,10,19,3,19
+MiniSQL Master,com.minisql.master.balance,SyncProgress,4,127,5,15,0,23,5,13,0,8
+MiniSQL Master,com.minisql.master.balance,RegionMigrationManager,82,569,17,55,19,132,17,43,0,24
+MiniSQL Master,com.minisql.master.balance,RollbackHandler,0,69,0,4,0,17,0,6,0,4
+MiniSQL Master,com.minisql.master.balance,PrepareHandler,0,72,0,4,0,18,0,7,0,5
+MiniSQL Master,com.minisql.master.balance,SyncHandler,0,86,0,8,0,21,0,9,0,5
 MiniSQL Master,com.minisql.master,MasterServer.new MasterElection.MasterStateListener() {...},32,0,0,0,10,0,3,0,3,0
 MiniSQL Master,com.minisql.master,MasterServer,348,0,30,0,101,0,24,0,9,0
-MiniSQL Master,com.minisql.master.metadata,RegionMetadata,92,181,15,23,13,45,18,23,5,17
+MiniSQL Master,com.minisql.master.metadata,RegionMetadata,285,0,38,0,63,0,43,0,24,0
 MiniSQL Master,com.minisql.master.metadata,TableMetadata,71,70,8,2,12,22,13,7,8,7
 MiniSQL Master,com.minisql.master.metadata,RouteTable,78,203,11,11,17,47,14,11,4,10
-MiniSQL Master,com.minisql.master.metadata,MetadataManager,57,374,8,14,17,84,8,20,0,17
+MiniSQL Master,com.minisql.master.metadata,MetadataManager,414,22,22,0,96,6,27,2,16,2
 MiniSQL Master,com.minisql.master.zk,ZookeeperClient,183,45,25,1,37,9,29,3,16,3
 MiniSQL Master,com.minisql.master.zk,MasterElection.new Watcher() {...},23,0,2,0,8,0,3,0,2,0
 MiniSQL Master,com.minisql.master.zk,ZookeeperClient.new Watcher() {...},31,6,6,0,8,1,4,1,1,1
