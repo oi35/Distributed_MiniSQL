@@ -62,7 +62,18 @@ public class MigrationTask {
         return state;
     }
 
-    public void setState(MigrationState state) {
+    public void setState(MigrationState newState) {
+        if (!this.state.canTransitionTo(newState)) {
+            throw new IllegalStateException(
+                String.format("Invalid state transition from %s to %s", this.state, newState));
+        }
+        this.state = newState;
+    }
+
+    /**
+     * Set state without validation. For testing purposes only.
+     */
+    void setStateUnchecked(MigrationState state) {
         this.state = state;
     }
 

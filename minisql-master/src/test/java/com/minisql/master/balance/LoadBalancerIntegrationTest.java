@@ -65,10 +65,16 @@ public class LoadBalancerIntegrationTest {
         String migrationId = migrationManager.submitMigration("region-1", "rs-001", "rs-002");
         assertNotNull(migrationId);
 
-        Thread.sleep(2000);
-
-        List<MigrationTask> activeMigrations = migrationManager.getActiveMigrations();
-        assertTrue(activeMigrations.size() > 0);
+        long deadline = System.currentTimeMillis() + 5000;
+        boolean hasMigrations = false;
+        while (System.currentTimeMillis() < deadline) {
+            if (migrationManager.getActiveMigrations().size() > 0) {
+                hasMigrations = true;
+                break;
+            }
+            Thread.sleep(100);
+        }
+        assertTrue(hasMigrations);
         assertFalse(loadBalancer.canStartNewMigration("rs-001"));
     }
 
@@ -83,10 +89,16 @@ public class LoadBalancerIntegrationTest {
 
         assertFalse(loadBalancer.needsBalance());
 
-        Thread.sleep(2000);
-
-        List<MigrationTask> activeMigrations = migrationManager.getActiveMigrations();
-        assertEquals(0, activeMigrations.size());
+        long deadline = System.currentTimeMillis() + 5000;
+        boolean noMigrations = true;
+        while (System.currentTimeMillis() < deadline) {
+            if (migrationManager.getActiveMigrations().size() > 0) {
+                noMigrations = false;
+                break;
+            }
+            Thread.sleep(100);
+        }
+        assertTrue(noMigrations);
         assertTrue(loadBalancer.canStartNewMigration("rs-001"));
     }
 

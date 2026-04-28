@@ -27,7 +27,7 @@ public class SyncHandlerTest {
     @Test
     public void testStartSync() throws MigrationException {
         MigrationTask task = new MigrationTask("mig-001", "region-001", "rs-001", "rs-002");
-        task.setState(MigrationState.MIGRATING_SYNC);
+        task.setStateUnchecked(MigrationState.MIGRATING_SYNC);
         task.setStartTime(System.currentTimeMillis());
 
         when(executor.startSync("region-001", "rs-001", "rs-002")).thenReturn(true);
@@ -42,7 +42,7 @@ public class SyncHandlerTest {
     @Test
     public void testSyncInProgress() throws MigrationException {
         MigrationTask task = new MigrationTask("mig-001", "region-001", "rs-001", "rs-002");
-        task.setState(MigrationState.MIGRATING_SYNC);
+        task.setStateUnchecked(MigrationState.MIGRATING_SYNC);
         task.setStartTime(System.currentTimeMillis());
         task.setMetadata("syncStarted", true);
 
@@ -59,7 +59,7 @@ public class SyncHandlerTest {
     @Test
     public void testSyncCompleted() throws MigrationException {
         MigrationTask task = new MigrationTask("mig-001", "region-001", "rs-001", "rs-002");
-        task.setState(MigrationState.MIGRATING_SYNC);
+        task.setStateUnchecked(MigrationState.MIGRATING_SYNC);
         task.setStartTime(System.currentTimeMillis());
         task.setMetadata("syncStarted", true);
 
@@ -75,7 +75,7 @@ public class SyncHandlerTest {
     @Test
     public void testSyncTimeout() throws MigrationException {
         MigrationTask task = new MigrationTask("mig-001", "region-001", "rs-001", "rs-002");
-        task.setState(MigrationState.MIGRATING_SYNC);
+        task.setStateUnchecked(MigrationState.MIGRATING_SYNC);
         task.setStartTime(System.currentTimeMillis() - 301000);
 
         try {
@@ -90,7 +90,7 @@ public class SyncHandlerTest {
     @Test
     public void testStartSyncFailure() throws MigrationException {
         MigrationTask task = new MigrationTask("mig-001", "region-001", "rs-001", "rs-002");
-        task.setState(MigrationState.MIGRATING_SYNC);
+        task.setStateUnchecked(MigrationState.MIGRATING_SYNC);
         task.setStartTime(System.currentTimeMillis());
 
         when(executor.startSync("region-001", "rs-001", "rs-002"))
@@ -107,7 +107,7 @@ public class SyncHandlerTest {
     @Test
     public void testGetProgressFailure() throws MigrationException {
         MigrationTask task = new MigrationTask("mig-001", "region-001", "rs-001", "rs-002");
-        task.setState(MigrationState.MIGRATING_SYNC);
+        task.setStateUnchecked(MigrationState.MIGRATING_SYNC);
         task.setStartTime(System.currentTimeMillis());
         task.setMetadata("syncStarted", true);
 
