@@ -74,12 +74,13 @@ public class FakeRegionServer {
                 .setTimestamp(System.currentTimeMillis())
                 .addAllRegionIds(regions.keySet())
                 .setMetrics(ServerMetrics.newBuilder()
-                        .setCpuUsagePercent(50.0)
-                        .setMemoryUsedMb(1024)
-                        .setDiskUsedMb(2048)
+                        .setCpuUsage(50.0)
+                        .setMemoryUsage(50.0)
+                        .setDiskUsedBytes(2048L * 1024 * 1024)
+                        .setDiskTotalBytes(10240L * 1024 * 1024)
                         .build())
                 .build();
 
-        return stub.heartbeat(request);
+        return stub.sendHeartbeat(request);
     }
 }
