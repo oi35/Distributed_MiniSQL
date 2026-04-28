@@ -93,6 +93,15 @@ public class RegionMigrationManager {
             .collect(Collectors.toList());
     }
 
+    /**
+     * Submit a new region migration task.
+     *
+     * @param regionId the ID of the region to migrate
+     * @param sourceServerId the ID of the source server
+     * @param targetServerId the ID of the target server
+     * @return the migration task ID
+     * @throws IllegalArgumentException if parameters are null or source equals target
+     */
     public String submitMigration(String regionId, String sourceServerId, String targetServerId) {
         if (regionId == null || sourceServerId == null || targetServerId == null) {
             throw new IllegalArgumentException("Parameters cannot be null");
@@ -107,6 +116,12 @@ public class RegionMigrationManager {
         return migrationId;
     }
 
+    /**
+     * Get a migration task by ID.
+     *
+     * @param migrationId the migration task ID
+     * @return the migration task, or null if not found
+     */
     public MigrationTask getTask(String migrationId) {
         return migrations.get(migrationId);
     }
@@ -140,7 +155,7 @@ public class RegionMigrationManager {
                 if (shouldRetry(task)) {
                     Long retryTime = (Long) task.getMetadata("retryTime");
                     if (retryTime != null && System.currentTimeMillis() >= retryTime) {
-                        task.setState(MigrationState.PENDING);
+                        task.setStateUnchecked(MigrationState.PENDING);
                         logger.info("Retrying task {}, attempt {}", task.getMigrationId(), task.getRetryCount() + 1);
                     }
                 }
@@ -200,16 +215,33 @@ public class RegionMigrationManager {
         return 60000 * (1L << retryCount);
     }
 
+    /**
+     * Get all migration tasks.
+     *
+     * @return list of all migration tasks
+     */
     public List<MigrationTask> getAllTasks() {
         return new ArrayList<>(migrations.values());
     }
 
+    /**
+     * Get migration tasks by state.
+     *
+     * @param state the migration state to filter by
+     * @return list of tasks in the specified state
+     */
     public List<MigrationTask> getTasksByState(MigrationState state) {
         return migrations.values().stream()
             .filter(task -> task.getState() == state)
             .collect(Collectors.toList());
     }
 
+    /**
+     * Get migration tasks by server ID.
+     *
+     * @param serverId the server ID (source or target)
+     * @return list of tasks involving the specified server
+     */
     public List<MigrationTask> getTasksByServer(String serverId) {
         return migrations.values().stream()
             .filter(task -> task.getSourceServerId().equals(serverId) ||
@@ -217,6 +249,12 @@ public class RegionMigrationManager {
             .collect(Collectors.toList());
     }
 
+    /**
+     * Cancel a migration task.
+     *
+     * @param migrationId the migration task ID
+     * @return true if cancelled, false if not found or already terminal
+     */
     public boolean cancelMigration(String migrationId) {
         MigrationTask task = migrations.get(migrationId);
         if (task == null || task.getState().isTerminal()) {
@@ -227,17 +265,28 @@ public class RegionMigrationManager {
         return true;
     }
 
+    /**
+     * Retry a failed migration task.
+     *
+     * @param migrationId the migration task ID
+     * @return true if retried, false if not found or not in FAILED state
+     */
     public boolean retryMigration(String migrationId) {
         MigrationTask task = migrations.get(migrationId);
         if (task == null || task.getState() != MigrationState.FAILED) {
             return false;
         }
-        task.setState(MigrationState.PENDING);
+        task.setStateUnchecked(MigrationState.PENDING);
         task.setErrorMessage(null);
         task.removeMetadata("retryTime");
         return true;
     }
 
+    /**
+     * Get migration statistics.
+     *
+     * @return statistics including total, completed, failed, cancelled, active tasks and average duration
+     */
     public MigrationStatistics getStatistics() {
         int total = migrations.size();
         int completed = 0;
