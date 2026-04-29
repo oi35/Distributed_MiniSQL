@@ -55,6 +55,25 @@ Distributed MiniSQL 是一个简化的分布式数据库系统，采用 Master-R
 - 分布式查询执行
 - Hash Join实现
 
+### 模块结构
+```
+Distributed_MiniSQL/
+├── minisql-common/          # 公共模块（protobuf定义）✅
+├── minisql-master/          # Master服务（核心功能100%完成）✅
+│   ├── cluster/            # 集群管理（ClusterManager）✅
+│   ├── metadata/           # 元数据管理（MetadataManager）✅
+│   ├── balance/            # 负载均衡（LoadBalancer + RegionMigrationManager）✅
+│   ├── service/            # gRPC服务实现 ✅
+│   ├── zk/                 # Zookeeper集成 ✅
+│   └── integration/        # 集成测试基础设施 ✅
+│       ├── fixtures/       # 测试工具类（5个）
+│       ├── fast/           # Fast层测试（2个）
+│       ├── e2e/            # E2E层测试（2个）
+│       └── stress/         # Stress层测试（2个）
+├── minisql-regionserver/    # RegionServer服务（待实现）⏳
+└── minisql-client/          # 客户端SDK（待实现）⏳
+```
+
 ## 快速开始
 
 ### 环境要求
@@ -101,7 +120,7 @@ mvn exec:java -Dexec.mainClass="com.minisql.regionserver.RegionServerMain" \
 ### 运行测试
 
 ```bash
-# 运行所有单元测试
+# 运行master模块所有单元测试
 cd minisql-master
 mvn test
 
@@ -150,7 +169,8 @@ mvn verify -Pintegration-stress
 - [LoadBalancer设计](docs/superpowers/specs/2026-04-20-loadbalancer-design.md)
 - [RegionMigrationManager设计](docs/superpowers/specs/2026-04-26-regionmigrationmanager-design.md)
 - [Zookeeper集成设计](docs/superpowers/specs/2026-04-18-zookeeper-integration-design.md)
-- [集成测试设计](docs/superpowers/specs/2026-04-28-master-integration-testing-design.md)
+- [master集成测试设计](docs/superpowers/specs/2026-04-28-master-integration-testing-design.md)
+- [master总体详细设计](docs/superpowers/specs/2026-04-29-master-module-complete-design.md)
 
 ### 使用指南
 
@@ -236,7 +256,3 @@ test(paxos): add concurrent proposal tests
 
 - GitHub Issues: https://github.com/oi35/Distributed_MiniSQL/issues
 - 项目主页: https://github.com/oi35/Distributed_MiniSQL
-
----
-
-**注意：** 这是一个教学项目，重点在于理解分布式数据库的核心概念，而非生产级别的性能优化。
