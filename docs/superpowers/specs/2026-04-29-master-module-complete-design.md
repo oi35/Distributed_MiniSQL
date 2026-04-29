@@ -998,26 +998,15 @@ migration.max.retries=3
 
 ## 附录
 
-### A. 参考文档
-
-- [整体架构设计](2026-04-15-distributed-minisql-design.md)
-- [LoadBalancer设计](2026-04-20-loadbalancer-design.md)
-- [RegionMigrationManager设计](2026-04-26-regionmigrationmanager-design.md)
-- [Zookeeper集成设计](2026-04-18-zookeeper-integration-design.md)
-- [集成测试设计](2026-04-28-master-integration-testing-design.md)
-
-### B. 代码仓库
+### A. 代码仓库
 
 - GitHub: https://github.com/oi35/Distributed_MiniSQL
 - Master模块: `minisql-master/`
 - 测试代码: `minisql-master/src/test/`
 
-### C. 联系方式
+### B. 联系方式
 
 - 项目负责人：成员1
 - GitHub Issues: https://github.com/oi35/Distributed_MiniSQL/issues
 
----
-
-**文档结束**
 
