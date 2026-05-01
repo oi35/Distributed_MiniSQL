@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RouteTable.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">MiniSQL Master</a> &gt; <a href="index.source.html" class="el_package">com.minisql.master.metadata</a> &gt; <span class="el_source">RouteTable.java</span></div><h1>RouteTable.java</h1><pre class="source lang-java linenums">package com.minisql.master.metadata;
+
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
+
+/**
+ * 路由表
+ *
+ * 管理表到Region的路由映射，支持点查询和范围查询
+ */
+public class RouteTable {
+
+    // 表名 -&gt; Region列表（按startKey排序）
+    private final Map&lt;String, List&lt;RegionMetadata&gt;&gt; tableRoutes;
+
+    // Region ID -&gt; RegionMetadata
+    private final Map&lt;String, RegionMetadata&gt; regionIndex;
+
+    private final ReadWriteLock lock;
+
+<span class="fc" id="L24">    public RouteTable() {</span>
+<span class="fc" id="L25">        this.tableRoutes = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc" id="L26">        this.regionIndex = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc" id="L27">        this.lock = new ReentrantReadWriteLock();</span>
+<span class="fc" id="L28">    }</span>
+
+    /**
+     * 添加Region到路由表
+     */
+    public void addRegion(RegionMetadata region) {
+<span class="fc" id="L34">        lock.writeLock().lock();</span>
+        try {
+<span class="fc" id="L36">            String tableName = region.getTableName();</span>
+
+            // 添加到索引
+<span class="fc" id="L39">            regionIndex.put(region.getRegionId(), region);</span>
+
+            // 添加到表路由
+<span class="fc" id="L42">            List&lt;RegionMetadata&gt; regions = tableRoutes.computeIfAbsent(</span>
+                    tableName,
+<span class="fc" id="L44">                    k -&gt; new ArrayList&lt;&gt;()</span>
+            );
+
+<span class="fc" id="L47">            regions.add(region);</span>
+
+            // 按startKey排序
+<span class="fc" id="L50">            regions.sort(Comparator.comparing(RegionMetadata::getStartKey));</span>
+
+        } finally {
+<span class="fc" id="L53">            lock.writeLock().unlock();</span>
+        }
+<span class="fc" id="L55">    }</span>
+
+    /**
+     * 从路由表移除Region
+     */
+    public void removeRegion(String regionId) {
+<span class="fc" id="L61">        lock.writeLock().lock();</span>
+        try {
+<span class="fc" id="L63">            RegionMetadata region = regionIndex.remove(regionId);</span>
+<span class="pc bpc" id="L64" title="1 of 2 branches missed.">            if (region != null) {</span>
+<span class="fc" id="L65">                String tableName = region.getTableName();</span>
+<span class="fc" id="L66">                List&lt;RegionMetadata&gt; regions = tableRoutes.get(tableName);</span>
+<span class="pc bpc" id="L67" title="1 of 2 branches missed.">                if (regions != null) {</span>
+<span class="fc" id="L68">                    regions.remove(region);</span>
+<span class="pc bpc" id="L69" title="1 of 2 branches missed.">                    if (regions.isEmpty()) {</span>
+<span class="fc" id="L70">                        tableRoutes.remove(tableName);</span>
+                    }
+                }
+            }
+        } finally {
+<span class="fc" id="L75">            lock.writeLock().unlock();</span>
+        }
+<span class="fc" id="L77">    }</span>
+
+    /**
+     * 根据键查找Region
+     *
+     * @param tableName 表名
+     * @param key 键
+     * @return Region元数据，未找到返回null
+     */
+    public RegionMetadata findRegionForKey(String tableName, String key) {
+<span class="fc" id="L87">        lock.readLock().lock();</span>
+        try {
+<span class="fc" id="L89">            List&lt;RegionMetadata&gt; regions = tableRoutes.get(tableName);</span>
+<span class="pc bpc" id="L90" title="2 of 4 branches missed.">            if (regions == null || regions.isEmpty()) {</span>
+<span class="nc" id="L91">                return null;</span>
+            }
+
+            // 二分查找
+<span class="pc bpc" id="L95" title="1 of 2 branches missed.">            for (RegionMetadata region : regions) {</span>
+<span class="fc bfc" id="L96" title="All 2 branches covered.">                if (region.containsKey(key)) {</span>
+<span class="fc" id="L97">                    return region;</span>
+                }
+<span class="fc" id="L99">            }</span>
+
+<span class="nc" id="L101">            return null;</span>
+
+        } finally {
+<span class="fc" id="L104">            lock.readLock().unlock();</span>
+        }
+    }
+
+    /**
+     * 根据范围查找Region列表
+     *
+     * @param tableName 表名
+     * @param startKey 起始键
+     * @param endKey 结束键
+     * @return Region列表
+     */
+    public List&lt;RegionMetadata&gt; findRegionsForRange(String tableName, String startKey, String endKey) {
+<span class="fc" id="L117">        lock.readLock().lock();</span>
+        try {
+<span class="fc" id="L119">            List&lt;RegionMetadata&gt; regions = tableRoutes.get(tableName);</span>
+<span class="pc bpc" id="L120" title="2 of 4 branches missed.">            if (regions == null || regions.isEmpty()) {</span>
+<span class="nc" id="L121">                return Collections.emptyList();</span>
+            }
+
+<span class="fc" id="L124">            return regions.stream()</span>
+<span class="fc" id="L125">                    .filter(region -&gt; region.overlapsRange(startKey, endKey))</span>
+<span class="fc" id="L126">                    .collect(Collectors.toList());</span>
+
+        } finally {
+<span class="fc" id="L129">            lock.readLock().unlock();</span>
+        }
+    }
+
+    /**
+     * 获取表的所有Region
+     *
+     * @param tableName 表名
+     * @return Region列表
+     */
+    public List&lt;RegionMetadata&gt; getTableRegions(String tableName) {
+<span class="fc" id="L140">        lock.readLock().lock();</span>
+        try {
+<span class="fc" id="L142">            List&lt;RegionMetadata&gt; regions = tableRoutes.get(tableName);</span>
+<span class="pc bpc" id="L143" title="1 of 2 branches missed.">            if (regions == null) {</span>
+<span class="nc" id="L144">                return Collections.emptyList();</span>
+            }
+<span class="fc" id="L146">            return new ArrayList&lt;&gt;(regions);</span>
+        } finally {
+<span class="fc" id="L148">            lock.readLock().unlock();</span>
+        }
+    }
+
+    /**
+     * 根据Region ID获取Region
+     *
+     * @param regionId Region ID
+     * @return Region元数据，未找到返回null
+     */
+    public RegionMetadata getRegion(String regionId) {
+<span class="fc" id="L159">        return regionIndex.get(regionId);</span>
+    }
+
+    /**
+     * 获取所有表名
+     *
+     * @return 表名列表
+     */
+    public List&lt;String&gt; getAllTableNames() {
+<span class="nc" id="L168">        lock.readLock().lock();</span>
+        try {
+<span class="nc" id="L170">            return new ArrayList&lt;&gt;(tableRoutes.keySet());</span>
+        } finally {
+<span class="nc" id="L172">            lock.readLock().unlock();</span>
+        }
+    }
+
+    /**
+     * 获取所有Region
+     *
+     * @return Region列表
+     */
+    public List&lt;RegionMetadata&gt; getAllRegions() {
+<span class="nc" id="L182">        return new ArrayList&lt;&gt;(regionIndex.values());</span>
+    }
+
+    /**
+     * 清空路由表
+     */
+    public void clear() {
+<span class="nc" id="L189">        lock.writeLock().lock();</span>
+        try {
+<span class="nc" id="L191">            tableRoutes.clear();</span>
+<span class="nc" id="L192">            regionIndex.clear();</span>
+        } finally {
+<span class="nc" id="L194">            lock.writeLock().unlock();</span>
+        }
+<span class="nc" id="L196">    }</span>
+
+    /**
+     * 获取Region总数
+     */
+    public int getRegionCount() {
+<span class="fc" id="L202">        return regionIndex.size();</span>
+    }
+
+    /**
+     * 获取表的Region数量
+     */
+    public int getTableRegionCount(String tableName) {
+<span class="nc" id="L209">        lock.readLock().lock();</span>
+        try {
+<span class="nc" id="L211">            List&lt;RegionMetadata&gt; regions = tableRoutes.get(tableName);</span>
+<span class="nc bnc" id="L212" title="All 2 branches missed.">            return regions == null ? 0 : regions.size();</span>
+        } finally {
+<span class="nc" id="L214">            lock.readLock().unlock();</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

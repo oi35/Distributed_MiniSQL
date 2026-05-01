@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MigrationException.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">MiniSQL Master</a> &gt; <a href="index.source.html" class="el_package">com.minisql.master.balance</a> &gt; <span class="el_source">MigrationException.java</span></div><h1>MigrationException.java</h1><pre class="source lang-java linenums">package com.minisql.master.balance;
+
+/**
+ * Region迁移异常
+ */
+public class MigrationException extends Exception {
+
+    private final boolean recoverable;
+
+    public MigrationException(String message) {
+<span class="fc" id="L11">        this(message, false);</span>
+<span class="fc" id="L12">    }</span>
+
+    public MigrationException(String message, Throwable cause) {
+<span class="fc" id="L15">        this(message, cause, false);</span>
+<span class="fc" id="L16">    }</span>
+
+    public MigrationException(String message, boolean recoverable) {
+<span class="fc" id="L19">        super(message);</span>
+<span class="fc" id="L20">        this.recoverable = recoverable;</span>
+<span class="fc" id="L21">    }</span>
+
+    public MigrationException(String message, Throwable cause, boolean recoverable) {
+<span class="fc" id="L24">        super(message, cause);</span>
+<span class="fc" id="L25">        this.recoverable = recoverable;</span>
+<span class="fc" id="L26">    }</span>
+
+    public boolean isRecoverable() {
+<span class="fc" id="L29">        return recoverable;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

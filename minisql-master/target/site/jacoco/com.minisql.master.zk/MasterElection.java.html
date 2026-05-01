@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MasterElection.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">MiniSQL Master</a> &gt; <a href="index.source.html" class="el_package">com.minisql.master.zk</a> &gt; <span class="el_source">MasterElection.java</span></div><h1>MasterElection.java</h1><pre class="source lang-java linenums">package com.minisql.master.zk;
+
+import org.apache.zookeeper.CreateMode;
+import org.apache.zookeeper.KeeperException;
+import org.apache.zookeeper.WatchedEvent;
+import org.apache.zookeeper.Watcher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.Collections;
+import java.util.List;
+
+/**
+ * Master选举管理器
+ *
+ * 使用Zookeeper实现Master选举，支持主备切换
+ */
+public class MasterElection {
+
+<span class="fc" id="L20">    private static final Logger logger = LoggerFactory.getLogger(MasterElection.class);</span>
+
+    private static final String ELECTION_PATH = &quot;/minisql/master/election&quot;;
+
+    private final ZookeeperClient zkClient;
+    private final String serverId;
+    private String electionNode;
+<span class="nc" id="L27">    private volatile boolean isMaster = false;</span>
+    private MasterStateListener listener;
+
+    public interface MasterStateListener {
+        void onBecomeMaster();
+        void onLoseMaster();
+    }
+
+<span class="nc" id="L35">    public MasterElection(ZookeeperClient zkClient, String serverId) {</span>
+<span class="nc" id="L36">        this.zkClient = zkClient;</span>
+<span class="nc" id="L37">        this.serverId = serverId;</span>
+<span class="nc" id="L38">    }</span>
+
+    /**
+     * 设置状态监听器
+     */
+    public void setListener(MasterStateListener listener) {
+<span class="nc" id="L44">        this.listener = listener;</span>
+<span class="nc" id="L45">    }</span>
+
+    /**
+     * 开始选举
+     */
+    public void startElection() throws KeeperException, InterruptedException {
+        // 确保选举路径存在
+<span class="nc" id="L52">        zkClient.ensurePath(ELECTION_PATH);</span>
+
+        // 创建临时顺序节点
+<span class="nc" id="L55">        electionNode = zkClient.createEphemeralSequentialNode(</span>
+                ELECTION_PATH + &quot;/master-&quot;,
+                serverId
+        );
+
+<span class="nc" id="L60">        logger.info(&quot;Created election node: {}&quot;, electionNode);</span>
+
+        // 检查是否成为Master
+<span class="nc" id="L63">        checkMaster();</span>
+<span class="nc" id="L64">    }</span>
+
+    /**
+     * 检查是否成为Master
+     */
+    private void checkMaster() throws KeeperException, InterruptedException {
+<span class="nc" id="L70">        List&lt;String&gt; children = zkClient.getChildren(ELECTION_PATH);</span>
+<span class="nc" id="L71">        Collections.sort(children);</span>
+
+<span class="nc" id="L73">        String smallestNode = children.get(0);</span>
+<span class="nc" id="L74">        String myNode = electionNode.substring(ELECTION_PATH.length() + 1);</span>
+
+<span class="nc bnc" id="L76" title="All 2 branches missed.">        if (myNode.equals(smallestNode)) {</span>
+            // 成为Master
+<span class="nc" id="L78">            becomeMaster();</span>
+        } else {
+            // 不是Master，监听前一个节点
+<span class="nc" id="L81">            int myIndex = children.indexOf(myNode);</span>
+<span class="nc" id="L82">            String prevNode = children.get(myIndex - 1);</span>
+<span class="nc" id="L83">            watchPreviousNode(ELECTION_PATH + &quot;/&quot; + prevNode);</span>
+        }
+<span class="nc" id="L85">    }</span>
+
+    /**
+     * 成为Master
+     */
+    private void becomeMaster() {
+<span class="nc" id="L91">        isMaster = true;</span>
+<span class="nc" id="L92">        logger.info(&quot;Became Master: {}&quot;, serverId);</span>
+
+<span class="nc bnc" id="L94" title="All 2 branches missed.">        if (listener != null) {</span>
+<span class="nc" id="L95">            listener.onBecomeMaster();</span>
+        }
+<span class="nc" id="L97">    }</span>
+
+    /**
+     * 失去Master身份
+     */
+    private void loseMaster() {
+<span class="nc" id="L103">        isMaster = false;</span>
+<span class="nc" id="L104">        logger.info(&quot;Lost Master status: {}&quot;, serverId);</span>
+
+<span class="nc bnc" id="L106" title="All 2 branches missed.">        if (listener != null) {</span>
+<span class="nc" id="L107">            listener.onLoseMaster();</span>
+        }
+<span class="nc" id="L109">    }</span>
+
+    /**
+     * 监听前一个节点
+     */
+    private void watchPreviousNode(String prevNodePath) throws KeeperException, InterruptedException {
+<span class="nc" id="L115">        zkClient.exists(prevNodePath, new Watcher() {</span>
+            @Override
+            public void process(WatchedEvent event) {
+<span class="nc bnc" id="L118" title="All 2 branches missed.">                if (event.getType() == Event.EventType.NodeDeleted) {</span>
+<span class="nc" id="L119">                    logger.info(&quot;Previous node deleted, re-checking master status&quot;);</span>
+                    try {
+<span class="nc" id="L121">                        checkMaster();</span>
+<span class="nc" id="L122">                    } catch (Exception e) {</span>
+<span class="nc" id="L123">                        logger.error(&quot;Failed to check master status&quot;, e);</span>
+<span class="nc" id="L124">                    }</span>
+                }
+<span class="nc" id="L126">            }</span>
+        });
+
+<span class="nc" id="L129">        logger.debug(&quot;Watching previous node: {}&quot;, prevNodePath);</span>
+<span class="nc" id="L130">    }</span>
+
+    /**
+     * 停止选举
+     */
+    public void stopElection() {
+<span class="nc bnc" id="L136" title="All 2 branches missed.">        if (electionNode != null) {</span>
+            try {
+<span class="nc" id="L138">                zkClient.deleteNode(electionNode);</span>
+<span class="nc" id="L139">                logger.info(&quot;Deleted election node: {}&quot;, electionNode);</span>
+<span class="nc" id="L140">            } catch (Exception e) {</span>
+<span class="nc" id="L141">                logger.error(&quot;Failed to delete election node&quot;, e);</span>
+<span class="nc" id="L142">            }</span>
+        }
+
+<span class="nc bnc" id="L145" title="All 2 branches missed.">        if (isMaster) {</span>
+<span class="nc" id="L146">            loseMaster();</span>
+        }
+<span class="nc" id="L148">    }</span>
+
+    /**
+     * 是否是Master
+     */
+    public boolean isMaster() {
+<span class="nc" id="L154">        return isMaster;</span>
+    }
+
+    /**
+     * 是否是Leader (isLeader is an alias for isMaster)
+     */
+    public boolean isLeader() {
+<span class="nc" id="L161">        return isMaster;</span>
+    }
+
+    /**
+     * 获取服务器ID
+     */
+    public String getServerId() {
+<span class="nc" id="L168">        return serverId;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

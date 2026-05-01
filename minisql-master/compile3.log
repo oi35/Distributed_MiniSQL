@@ -1,0 +1,53 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ---------------------< com.minisql:minisql-master >---------------------
+[INFO] Building MiniSQL Master 1.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- jacoco:0.8.11:prepare-agent (default) @ minisql-master ---
+[INFO] argLine set to -javaagent:C:\\Users\\Jatrawery\\.m2\\repository\\org\\jacoco\\org.jacoco.agent\\0.8.11\\org.jacoco.agent-0.8.11-runtime.jar=destfile=D:\\Distributed_MiniSQL\\minisql-master\\target\\jacoco.exec
+[INFO] 
+[INFO] --- resources:3.4.0:resources (default-resources) @ minisql-master ---
+[INFO] Copying 2 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.11.0:compile (default-compile) @ minisql-master ---
+[INFO] Changes detected - recompiling the module! :source
+[INFO] Compiling 11 source files with javac [debug target 11] to target\classes
+[INFO] -------------------------------------------------------------
+[WARNING] COMPILATION WARNING : 
+[INFO] -------------------------------------------------------------
+[WARNING] 未与 -source 11 一起设置系统模块的位置
+  不设置系统模块的位置可能会导致类文件无法在 JDK 11 上运行
+    建议使用 --release 11 而不是 -source 11 -target 11，因为它会自动设置系统模块的位置
+[INFO] 1 warning
+[INFO] -------------------------------------------------------------
+[INFO] -------------------------------------------------------------
+[ERROR] COMPILATION ERROR : 
+[INFO] -------------------------------------------------------------
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[340,17] 非法的类型开始
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[340,18] 方法声明无效; 需要返回类型
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[340,87] 需要<标识符>
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[340,88] 需要'{'或';'
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[341,18] 需要'{'
+[INFO] 5 errors 
+[INFO] -------------------------------------------------------------
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  4.946 s
+[INFO] Finished at: 2026-04-17T20:53:34+08:00
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.11.0:compile (default-compile) on project minisql-master: Compilation failure: Compilation failure: 
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[340,17] 非法的类型开始
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[340,18] 方法声明无效; 需要返回类型
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[340,87] 需要<标识符>
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[340,88] 需要'{'或';'
+[ERROR] /D:/Distributed_MiniSQL/minisql-master/src/main/java/com/minisql/master/service/ClientMasterServiceImpl.java:[341,18] 需要'{'
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException

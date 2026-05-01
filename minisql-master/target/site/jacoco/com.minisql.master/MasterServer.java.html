@@ -1,0 +1,261 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MasterServer.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">MiniSQL Master</a> &gt; <a href="index.source.html" class="el_package">com.minisql.master</a> &gt; <span class="el_source">MasterServer.java</span></div><h1>MasterServer.java</h1><pre class="source lang-java linenums">package com.minisql.master;
+
+import com.minisql.master.cluster.ClusterManager;
+import com.minisql.master.cluster.FailureRecoveryManager;
+import com.minisql.master.cluster.HeartbeatMonitor;
+import com.minisql.master.metadata.MetadataManager;
+import com.minisql.master.service.ClientMasterServiceImpl;
+import com.minisql.master.service.MasterServiceImpl;
+import com.minisql.master.zk.MasterElection;
+import com.minisql.master.zk.MetadataPersistence;
+import com.minisql.master.zk.ZookeeperClient;
+import io.grpc.Server;
+import io.grpc.ServerBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * Master服务器主类
+ *
+ * 负责启动gRPC服务器，注册服务，处理优雅关闭
+ */
+public class MasterServer {
+
+<span class="nc" id="L27">    private static final Logger logger = LoggerFactory.getLogger(MasterServer.class);</span>
+
+    private final int port;
+    private final String serverId;
+    private final Server server;
+    private final ClusterManager clusterManager;
+    private final MetadataManager metadataManager;
+    private final HeartbeatMonitor heartbeatMonitor;
+    private final FailureRecoveryManager failureRecoveryManager;
+
+    // Zookeeper组件
+    private final ZookeeperClient zkClient;
+    private final MasterElection masterElection;
+    private final MetadataPersistence metadataPersistence;
+
+    // 配置参数
+    private static final long HEARTBEAT_TIMEOUT_MS = 30000; // 30秒
+    private static final int HEARTBEAT_INTERVAL_MS = 3000;  // 3秒
+    private static final long MONITOR_CHECK_INTERVAL_MS = 10000; // 10秒
+    private static final String DEFAULT_ZK_CONNECT = &quot;localhost:2181&quot;;
+    private static final int ZK_SESSION_TIMEOUT = 30000; // 30秒
+
+<span class="nc" id="L49">    public MasterServer(int port, String serverId, String zkConnect) {</span>
+<span class="nc" id="L50">        this.port = port;</span>
+<span class="nc" id="L51">        this.serverId = serverId;</span>
+
+        // 初始化Zookeeper客户端
+<span class="nc" id="L54">        this.zkClient = new ZookeeperClient(zkConnect, ZK_SESSION_TIMEOUT);</span>
+
+        // 初始化Master选举
+<span class="nc" id="L57">        this.masterElection = new MasterElection(zkClient, serverId);</span>
+
+        // 初始化元数据持久化
+<span class="nc" id="L60">        this.metadataPersistence = new MetadataPersistence(zkClient);</span>
+
+        // 初始化集群管理器
+<span class="nc" id="L63">        this.clusterManager = new ClusterManager(HEARTBEAT_TIMEOUT_MS, HEARTBEAT_INTERVAL_MS);</span>
+
+        // 初始化元数据管理器
+<span class="nc" id="L66">        this.metadataManager = new MetadataManager();</span>
+
+        // 初始化故障恢复管理器
+<span class="nc" id="L69">        this.failureRecoveryManager = new FailureRecoveryManager(clusterManager);</span>
+
+        // 初始化心跳监控器
+<span class="nc" id="L72">        this.heartbeatMonitor = new HeartbeatMonitor(clusterManager, MONITOR_CHECK_INTERVAL_MS);</span>
+<span class="nc" id="L73">        this.heartbeatMonitor.setFailureHandler(failureRecoveryManager);</span>
+
+        // 构建gRPC服务器
+<span class="nc" id="L76">        this.server = ServerBuilder.forPort(port)</span>
+<span class="nc" id="L77">                .addService(new MasterServiceImpl(clusterManager))</span>
+<span class="nc" id="L78">                .addService(new ClientMasterServiceImpl(metadataManager))</span>
+<span class="nc" id="L79">                .build();</span>
+<span class="nc" id="L80">    }</span>
+
+    /**
+     * 启动服务器
+     */
+    public void start() throws IOException {
+        try {
+            // 连接Zookeeper
+<span class="nc" id="L88">            zkClient.connect();</span>
+<span class="nc" id="L89">            logger.info(&quot;Connected to Zookeeper&quot;);</span>
+
+            // 初始化元数据路径
+<span class="nc" id="L92">            metadataPersistence.initialize();</span>
+<span class="nc" id="L93">            logger.info(&quot;Metadata paths initialized&quot;);</span>
+
+            // 设置Master选举监听器
+<span class="nc" id="L96">            masterElection.setListener(new MasterElection.MasterStateListener() {</span>
+                @Override
+                public void onBecomeMaster() {
+<span class="nc" id="L99">                    logger.info(&quot;This node became Master: {}&quot;, serverId);</span>
+                    // 成为Master后启动服务
+                    try {
+<span class="nc" id="L102">                        startServices();</span>
+<span class="nc" id="L103">                    } catch (IOException e) {</span>
+<span class="nc" id="L104">                        logger.error(&quot;Failed to start services&quot;, e);</span>
+<span class="nc" id="L105">                    }</span>
+<span class="nc" id="L106">                }</span>
+
+                @Override
+                public void onLoseMaster() {
+<span class="nc" id="L110">                    logger.warn(&quot;This node lost Master status: {}&quot;, serverId);</span>
+                    // 失去Master身份后停止服务
+<span class="nc" id="L112">                    stopServices();</span>
+<span class="nc" id="L113">                }</span>
+            });
+
+            // 开始Master选举
+<span class="nc" id="L117">            masterElection.startElection();</span>
+<span class="nc" id="L118">            logger.info(&quot;Master election started&quot;);</span>
+
+<span class="nc" id="L120">        } catch (Exception e) {</span>
+<span class="nc" id="L121">            logger.error(&quot;Failed to start Master server&quot;, e);</span>
+<span class="nc" id="L122">            throw new IOException(&quot;Failed to start Master server&quot;, e);</span>
+<span class="nc" id="L123">        }</span>
+<span class="nc" id="L124">    }</span>
+
+    /**
+     * 启动服务（仅Master执行）
+     */
+    private void startServices() throws IOException {
+        // 启动gRPC服务器
+<span class="nc" id="L131">        server.start();</span>
+<span class="nc" id="L132">        logger.info(&quot;Master server started, listening on port {}&quot;, port);</span>
+
+        // 启动心跳监控器
+<span class="nc" id="L135">        heartbeatMonitor.start();</span>
+<span class="nc" id="L136">        logger.info(&quot;HeartbeatMonitor started&quot;);</span>
+
+        // 注册关闭钩子
+<span class="nc" id="L139">        Runtime.getRuntime().addShutdownHook(new Thread(() -&gt; {</span>
+<span class="nc" id="L140">            logger.info(&quot;Shutting down Master server due to JVM shutdown&quot;);</span>
+            try {
+<span class="nc" id="L142">                MasterServer.this.stop();</span>
+<span class="nc" id="L143">            } catch (InterruptedException e) {</span>
+<span class="nc" id="L144">                logger.error(&quot;Error during shutdown&quot;, e);</span>
+<span class="nc" id="L145">            }</span>
+<span class="nc" id="L146">        }));</span>
+<span class="nc" id="L147">    }</span>
+
+    /**
+     * 停止服务
+     */
+    private void stopServices() {
+        // 停止心跳监控器
+<span class="nc bnc" id="L154" title="All 2 branches missed.">        if (heartbeatMonitor != null) {</span>
+<span class="nc" id="L155">            heartbeatMonitor.stop();</span>
+<span class="nc" id="L156">            logger.info(&quot;HeartbeatMonitor stopped&quot;);</span>
+        }
+
+        // 停止gRPC服务器
+<span class="nc bnc" id="L160" title="All 4 branches missed.">        if (server != null &amp;&amp; !server.isShutdown()) {</span>
+            try {
+<span class="nc" id="L162">                logger.info(&quot;Stopping Master server...&quot;);</span>
+<span class="nc" id="L163">                server.shutdown().awaitTermination(30, TimeUnit.SECONDS);</span>
+<span class="nc" id="L164">                logger.info(&quot;Master server stopped&quot;);</span>
+<span class="nc" id="L165">            } catch (InterruptedException e) {</span>
+<span class="nc" id="L166">                logger.error(&quot;Error stopping server&quot;, e);</span>
+<span class="nc" id="L167">                Thread.currentThread().interrupt();</span>
+<span class="nc" id="L168">            }</span>
+        }
+<span class="nc" id="L170">    }</span>
+
+    /**
+     * 停止服务器
+     */
+    public void stop() throws InterruptedException {
+        // 停止Master选举
+<span class="nc bnc" id="L177" title="All 2 branches missed.">        if (masterElection != null) {</span>
+<span class="nc" id="L178">            masterElection.stopElection();</span>
+<span class="nc" id="L179">            logger.info(&quot;Master election stopped&quot;);</span>
+        }
+
+        // 停止服务
+<span class="nc" id="L183">        stopServices();</span>
+
+        // 关闭Zookeeper连接
+<span class="nc bnc" id="L186" title="All 2 branches missed.">        if (zkClient != null) {</span>
+<span class="nc" id="L187">            zkClient.close();</span>
+<span class="nc" id="L188">            logger.info(&quot;Zookeeper connection closed&quot;);</span>
+        }
+<span class="nc" id="L190">    }</span>
+
+    /**
+     * 阻塞等待服务器终止
+     */
+    public void blockUntilShutdown() throws InterruptedException {
+<span class="nc bnc" id="L196" title="All 2 branches missed.">        if (server != null) {</span>
+<span class="nc" id="L197">            server.awaitTermination();</span>
+        }
+<span class="nc" id="L199">    }</span>
+
+    /**
+     * 主入口
+     */
+    public static void main(String[] args) {
+        // 默认配置
+<span class="nc" id="L206">        int port = 8000;</span>
+<span class="nc" id="L207">        String serverId = &quot;master-&quot; + System.currentTimeMillis();</span>
+<span class="nc" id="L208">        String zkConnect = DEFAULT_ZK_CONNECT;</span>
+
+        // 从命令行参数读取配置
+<span class="nc bnc" id="L211" title="All 2 branches missed.">        if (args.length &gt; 0) {</span>
+            try {
+<span class="nc" id="L213">                port = Integer.parseInt(args[0]);</span>
+<span class="nc" id="L214">            } catch (NumberFormatException e) {</span>
+<span class="nc" id="L215">                logger.error(&quot;Invalid port number: {}&quot;, args[0]);</span>
+<span class="nc" id="L216">                System.exit(1);</span>
+<span class="nc" id="L217">            }</span>
+        }
+<span class="nc bnc" id="L219" title="All 2 branches missed.">        if (args.length &gt; 1) {</span>
+<span class="nc" id="L220">            serverId = args[1];</span>
+        }
+<span class="nc bnc" id="L222" title="All 2 branches missed.">        if (args.length &gt; 2) {</span>
+<span class="nc" id="L223">            zkConnect = args[2];</span>
+        }
+
+        // 从环境变量读取配置
+<span class="nc" id="L227">        String portEnv = System.getenv(&quot;MASTER_PORT&quot;);</span>
+<span class="nc bnc" id="L228" title="All 4 branches missed.">        if (portEnv != null &amp;&amp; !portEnv.isEmpty()) {</span>
+            try {
+<span class="nc" id="L230">                port = Integer.parseInt(portEnv);</span>
+<span class="nc" id="L231">            } catch (NumberFormatException e) {</span>
+<span class="nc" id="L232">                logger.error(&quot;Invalid MASTER_PORT environment variable: {}&quot;, portEnv);</span>
+<span class="nc" id="L233">            }</span>
+        }
+
+<span class="nc" id="L236">        String serverIdEnv = System.getenv(&quot;MASTER_ID&quot;);</span>
+<span class="nc bnc" id="L237" title="All 4 branches missed.">        if (serverIdEnv != null &amp;&amp; !serverIdEnv.isEmpty()) {</span>
+<span class="nc" id="L238">            serverId = serverIdEnv;</span>
+        }
+
+<span class="nc" id="L241">        String zkConnectEnv = System.getenv(&quot;ZK_CONNECT&quot;);</span>
+<span class="nc bnc" id="L242" title="All 4 branches missed.">        if (zkConnectEnv != null &amp;&amp; !zkConnectEnv.isEmpty()) {</span>
+<span class="nc" id="L243">            zkConnect = zkConnectEnv;</span>
+        }
+
+<span class="nc" id="L246">        logger.info(&quot;Starting Master server: id={}, port={}, zk={}&quot;, serverId, port, zkConnect);</span>
+
+<span class="nc" id="L248">        MasterServer masterServer = new MasterServer(port, serverId, zkConnect);</span>
+        try {
+<span class="nc" id="L250">            masterServer.start();</span>
+<span class="nc" id="L251">            masterServer.blockUntilShutdown();</span>
+<span class="nc" id="L252">        } catch (IOException e) {</span>
+<span class="nc" id="L253">            logger.error(&quot;Failed to start Master server&quot;, e);</span>
+<span class="nc" id="L254">            System.exit(1);</span>
+<span class="nc" id="L255">        } catch (InterruptedException e) {</span>
+<span class="nc" id="L256">            logger.error(&quot;Master server interrupted&quot;, e);</span>
+<span class="nc" id="L257">            Thread.currentThread().interrupt();</span>
+<span class="nc" id="L258">        }</span>
+<span class="nc" id="L259">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

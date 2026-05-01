@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MetadataPersistence.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">MiniSQL Master</a> &gt; <a href="index.source.html" class="el_package">com.minisql.master.zk</a> &gt; <span class="el_source">MetadataPersistence.java</span></div><h1>MetadataPersistence.java</h1><pre class="source lang-java linenums">package com.minisql.master.zk;
+
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+import com.minisql.master.metadata.RegionMetadata;
+import com.minisql.master.metadata.TableMetadata;
+import org.apache.zookeeper.KeeperException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.lang.reflect.Type;
+import java.util.HashMap;
+import java.util.Map;
+
+/**
+ * 元数据持久化管理器
+ *
+ * 将表和Region元数据持久化到Zookeeper
+ */
+public class MetadataPersistence {
+
+<span class="nc" id="L22">    private static final Logger logger = LoggerFactory.getLogger(MetadataPersistence.class);</span>
+
+    private static final String METADATA_ROOT = &quot;/minisql/metadata&quot;;
+    private static final String TABLES_PATH = METADATA_ROOT + &quot;/tables&quot;;
+    private static final String REGIONS_PATH = METADATA_ROOT + &quot;/regions&quot;;
+
+    private final ZookeeperClient zkClient;
+    private final Gson gson;
+
+<span class="nc" id="L31">    public MetadataPersistence(ZookeeperClient zkClient) {</span>
+<span class="nc" id="L32">        this.zkClient = zkClient;</span>
+<span class="nc" id="L33">        this.gson = new Gson();</span>
+<span class="nc" id="L34">    }</span>
+
+    /**
+     * 初始化元数据路径
+     */
+    public void initialize() throws KeeperException, InterruptedException {
+<span class="nc" id="L40">        zkClient.ensurePath(METADATA_ROOT);</span>
+<span class="nc" id="L41">        zkClient.ensurePath(TABLES_PATH);</span>
+<span class="nc" id="L42">        zkClient.ensurePath(REGIONS_PATH);</span>
+<span class="nc" id="L43">        logger.info(&quot;Metadata paths initialized&quot;);</span>
+<span class="nc" id="L44">    }</span>
+
+    /**
+     * 保存表元数据
+     */
+    public void saveTable(TableMetadata table) throws KeeperException, InterruptedException {
+<span class="nc" id="L50">        String path = TABLES_PATH + &quot;/&quot; + table.getTableName();</span>
+
+        // 构建简化的元数据对象（避免序列化protobuf）
+<span class="nc" id="L53">        Map&lt;String, Object&gt; tableData = new HashMap&lt;&gt;();</span>
+<span class="nc" id="L54">        tableData.put(&quot;tableName&quot;, table.getTableName());</span>
+<span class="nc" id="L55">        tableData.put(&quot;partitionKey&quot;, table.getPartitionKey());</span>
+<span class="nc" id="L56">        tableData.put(&quot;regionIds&quot;, table.getRegionIds());</span>
+<span class="nc" id="L57">        tableData.put(&quot;createTime&quot;, table.getCreateTime());</span>
+<span class="nc" id="L58">        tableData.put(&quot;updateTime&quot;, table.getUpdateTime());</span>
+<span class="nc" id="L59">        tableData.put(&quot;version&quot;, table.getVersion());</span>
+
+<span class="nc" id="L61">        String json = gson.toJson(tableData);</span>
+
+<span class="nc bnc" id="L63" title="All 2 branches missed.">        if (zkClient.exists(path)) {</span>
+<span class="nc" id="L64">            zkClient.setData(path, json);</span>
+<span class="nc" id="L65">            logger.debug(&quot;Updated table metadata: {}&quot;, table.getTableName());</span>
+        } else {
+<span class="nc" id="L67">            zkClient.createPersistentNode(path, json);</span>
+<span class="nc" id="L68">            logger.info(&quot;Saved table metadata: {}&quot;, table.getTableName());</span>
+        }
+<span class="nc" id="L70">    }</span>
+
+    /**
+     * 加载表元数据
+     */
+    public Map&lt;String, Object&gt; loadTable(String tableName) throws KeeperException, InterruptedException {
+<span class="nc" id="L76">        String path = TABLES_PATH + &quot;/&quot; + tableName;</span>
+
+<span class="nc bnc" id="L78" title="All 2 branches missed.">        if (!zkClient.exists(path)) {</span>
+<span class="nc" id="L79">            return null;</span>
+        }
+
+<span class="nc" id="L82">        String json = zkClient.getData(path);</span>
+<span class="nc" id="L83">        Type type = new TypeToken&lt;Map&lt;String, Object&gt;&gt;(){}.getType();</span>
+<span class="nc" id="L84">        return gson.fromJson(json, type);</span>
+    }
+
+    /**
+     * 删除表元数据
+     */
+    public void deleteTable(String tableName) throws KeeperException, InterruptedException {
+<span class="nc" id="L91">        String path = TABLES_PATH + &quot;/&quot; + tableName;</span>
+
+<span class="nc bnc" id="L93" title="All 2 branches missed.">        if (zkClient.exists(path)) {</span>
+<span class="nc" id="L94">            zkClient.deleteNode(path);</span>
+<span class="nc" id="L95">            logger.info(&quot;Deleted table metadata: {}&quot;, tableName);</span>
+        }
+<span class="nc" id="L97">    }</span>
+
+    /**
+     * 保存Region元数据
+     */
+    public void saveRegion(RegionMetadata region) throws KeeperException, InterruptedException {
+<span class="nc" id="L103">        String path = REGIONS_PATH + &quot;/&quot; + region.getRegionId();</span>
+
+        // 构建简化的元数据对象
+<span class="nc" id="L106">        Map&lt;String, Object&gt; regionData = new HashMap&lt;&gt;();</span>
+<span class="nc" id="L107">        regionData.put(&quot;regionId&quot;, region.getRegionId());</span>
+<span class="nc" id="L108">        regionData.put(&quot;tableName&quot;, region.getTableName());</span>
+<span class="nc" id="L109">        regionData.put(&quot;startKey&quot;, region.getStartKey());</span>
+<span class="nc" id="L110">        regionData.put(&quot;endKey&quot;, region.getEndKey());</span>
+<span class="nc" id="L111">        regionData.put(&quot;primaryServer&quot;, region.getPrimaryServer());</span>
+<span class="nc" id="L112">        regionData.put(&quot;replicas&quot;, region.getReplicas());</span>
+<span class="nc" id="L113">        regionData.put(&quot;state&quot;, region.getState().name());</span>
+<span class="nc" id="L114">        regionData.put(&quot;createTime&quot;, region.getCreateTime());</span>
+<span class="nc" id="L115">        regionData.put(&quot;updateTime&quot;, region.getUpdateTime());</span>
+<span class="nc" id="L116">        regionData.put(&quot;version&quot;, region.getVersion());</span>
+
+<span class="nc" id="L118">        String json = gson.toJson(regionData);</span>
+
+<span class="nc bnc" id="L120" title="All 2 branches missed.">        if (zkClient.exists(path)) {</span>
+<span class="nc" id="L121">            zkClient.setData(path, json);</span>
+<span class="nc" id="L122">            logger.debug(&quot;Updated region metadata: {}&quot;, region.getRegionId());</span>
+        } else {
+<span class="nc" id="L124">            zkClient.createPersistentNode(path, json);</span>
+<span class="nc" id="L125">            logger.info(&quot;Saved region metadata: {}&quot;, region.getRegionId());</span>
+        }
+<span class="nc" id="L127">    }</span>
+
+    /**
+     * 加载Region元数据
+     */
+    public Map&lt;String, Object&gt; loadRegion(String regionId) throws KeeperException, InterruptedException {
+<span class="nc" id="L133">        String path = REGIONS_PATH + &quot;/&quot; + regionId;</span>
+
+<span class="nc bnc" id="L135" title="All 2 branches missed.">        if (!zkClient.exists(path)) {</span>
+<span class="nc" id="L136">            return null;</span>
+        }
+
+<span class="nc" id="L139">        String json = zkClient.getData(path);</span>
+<span class="nc" id="L140">        Type type = new TypeToken&lt;Map&lt;String, Object&gt;&gt;(){}.getType();</span>
+<span class="nc" id="L141">        return gson.fromJson(json, type);</span>
+    }
+
+    /**
+     * 删除Region元数据
+     */
+    public void deleteRegion(String regionId) throws KeeperException, InterruptedException {
+<span class="nc" id="L148">        String path = REGIONS_PATH + &quot;/&quot; + regionId;</span>
+
+<span class="nc bnc" id="L150" title="All 2 branches missed.">        if (zkClient.exists(path)) {</span>
+<span class="nc" id="L151">            zkClient.deleteNode(path);</span>
+<span class="nc" id="L152">            logger.info(&quot;Deleted region metadata: {}&quot;, regionId);</span>
+        }
+<span class="nc" id="L154">    }</span>
+
+    /**
+     * 加载所有表名
+     */
+    public java.util.List&lt;String&gt; loadAllTableNames() throws KeeperException, InterruptedException {
+<span class="nc" id="L160">        return zkClient.getChildren(TABLES_PATH);</span>
+    }
+
+    /**
+     * 加载所有Region ID
+     */
+    public java.util.List&lt;String&gt; loadAllRegionIds() throws KeeperException, InterruptedException {
+<span class="nc" id="L167">        return zkClient.getChildren(REGIONS_PATH);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

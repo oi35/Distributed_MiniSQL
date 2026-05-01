@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TableMetadata.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">MiniSQL Master</a> &gt; <a href="index.source.html" class="el_package">com.minisql.master.metadata</a> &gt; <span class="el_source">TableMetadata.java</span></div><h1>TableMetadata.java</h1><pre class="source lang-java linenums">package com.minisql.master.metadata;
+
+import com.minisql.common.proto.TableSchema;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+
+/**
+ * 表元数据
+ *
+ * 封装表的元数据信息，包括表名、Schema、分区键、Region列表等
+ */
+public class TableMetadata {
+
+    private final String tableName;
+    private final TableSchema schema;
+    private final String partitionKey;
+    private final List&lt;String&gt; regionIds;
+    private final long createTime;
+    private volatile long updateTime;
+    private volatile int version;
+
+<span class="fc" id="L24">    public TableMetadata(String tableName, TableSchema schema, String partitionKey) {</span>
+<span class="fc" id="L25">        this.tableName = tableName;</span>
+<span class="fc" id="L26">        this.schema = schema;</span>
+<span class="fc" id="L27">        this.partitionKey = partitionKey;</span>
+<span class="fc" id="L28">        this.regionIds = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L29">        this.createTime = System.currentTimeMillis();</span>
+<span class="fc" id="L30">        this.updateTime = this.createTime;</span>
+<span class="fc" id="L31">        this.version = 1;</span>
+<span class="fc" id="L32">    }</span>
+
+    /**
+     * 添加Region
+     */
+    public synchronized void addRegion(String regionId) {
+<span class="pc bpc" id="L38" title="1 of 2 branches missed.">        if (!regionIds.contains(regionId)) {</span>
+<span class="fc" id="L39">            regionIds.add(regionId);</span>
+<span class="fc" id="L40">            updateVersion();</span>
+        }
+<span class="fc" id="L42">    }</span>
+
+    /**
+     * 移除Region
+     */
+    public synchronized void removeRegion(String regionId) {
+<span class="pc bpc" id="L48" title="1 of 2 branches missed.">        if (regionIds.remove(regionId)) {</span>
+<span class="fc" id="L49">            updateVersion();</span>
+        }
+<span class="fc" id="L51">    }</span>
+
+    /**
+     * 获取所有Region ID
+     */
+    public synchronized List&lt;String&gt; getRegionIds() {
+<span class="fc" id="L57">        return new ArrayList&lt;&gt;(regionIds);</span>
+    }
+
+    /**
+     * 获取Region数量
+     */
+    public synchronized int getRegionCount() {
+<span class="nc" id="L64">        return regionIds.size();</span>
+    }
+
+    /**
+     * 更新版本号
+     */
+    private void updateVersion() {
+<span class="fc" id="L71">        this.version++;</span>
+<span class="fc" id="L72">        this.updateTime = System.currentTimeMillis();</span>
+<span class="fc" id="L73">    }</span>
+
+    // Getters
+
+    public String getTableName() {
+<span class="fc" id="L78">        return tableName;</span>
+    }
+
+    public TableSchema getSchema() {
+<span class="nc" id="L82">        return schema;</span>
+    }
+
+    public String getPartitionKey() {
+<span class="fc" id="L86">        return partitionKey;</span>
+    }
+
+    public long getCreateTime() {
+<span class="nc" id="L90">        return createTime;</span>
+    }
+
+    public long getUpdateTime() {
+<span class="nc" id="L94">        return updateTime;</span>
+    }
+
+    public int getVersion() {
+<span class="nc" id="L98">        return version;</span>
+    }
+
+    @Override
+    public boolean equals(Object o) {
+<span class="nc bnc" id="L103" title="All 2 branches missed.">        if (this == o) return true;</span>
+<span class="nc bnc" id="L104" title="All 4 branches missed.">        if (o == null || getClass() != o.getClass()) return false;</span>
+<span class="nc" id="L105">        TableMetadata that = (TableMetadata) o;</span>
+<span class="nc" id="L106">        return Objects.equals(tableName, that.tableName);</span>
+    }
+
+    @Override
+    public int hashCode() {
+<span class="nc" id="L111">        return Objects.hash(tableName);</span>
+    }
+
+    @Override
+    public String toString() {
+<span class="nc" id="L116">        return String.format(&quot;TableMetadata{name=%s, regions=%d, version=%d}&quot;,</span>
+<span class="nc" id="L117">                tableName, regionIds.size(), version);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

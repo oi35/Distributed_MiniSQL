@@ -1,0 +1,440 @@
+syntax = "proto3";
+
+package minisql.master;
+
+import "common.proto";
+
+option java_multiple_files = true;
+option java_package = "com.minisql.master.proto";
+option java_outer_classname = "MasterProto";
+
+// ========================================
+// Master ↔ RegionServer 服务接口
+// ========================================
+
+service MasterService {
+  // ========== RegionServer生命周期管理（显式方法）==========
+
+  // RegionServer启动时注册到Master
+  rpc RegisterRegionServer(RegisterRegionServerRequest)
+      returns (RegisterRegionServerResponse);
+
+  // RegionServer定期发送心跳
+  rpc SendHeartbeat(HeartbeatRequest)
+      returns (HeartbeatResponse);
+
+  // RegionServer优雅关闭前注销
+  rpc UnregisterRegionServer(UnregisterRegionServerRequest)
+      returns (UnregisterRegionServerResponse);
+
+
+  // ========== Region分配管理（显式方法）==========
+
+  // RegionServer确认Region已打开并在线
+  rpc ReportRegionOnline(ReportRegionOnlineRequest)
+      returns (ReportRegionOnlineResponse);
+
+  // RegionServer确认Region已关闭
+  rpc ReportRegionClosed(ReportRegionClosedRequest)
+      returns (ReportRegionClosedResponse);
+
+
+  // ========== Region分裂（显式方法）==========
+
+  // RegionServer报告Region超过大小阈值
+  rpc ReportRegionSplit(ReportRegionSplitRequest)
+      returns (ReportRegionSplitResponse);
+
+
+  // ========== Region迁移（显式方法）==========
+
+  // RegionServer报告迁移进度
+  rpc ReportMigrationProgress(ReportMigrationProgressRequest)
+      returns (ReportMigrationProgressResponse);
+
+
+  // ========== 故障报告（显式方法）==========
+
+  // RegionServer报告Region故障
+  rpc ReportRegionFailure(ReportRegionFailureRequest)
+      returns (ReportRegionFailureResponse);
+
+
+  // ========== 管理操作（泛型方法，用于扩展）==========
+
+  // 通用管理操作接口（用于不常用的操作）
+  rpc AdminOperation(AdminOperationRequest)
+      returns (AdminOperationResponse);
+}
+
+// ========================================
+// Master ↔ Client 服务接口
+// ========================================
+
+service ClientMasterService {
+  // ========== 表DDL操作（显式方法）==========
+
+  // 创建新表
+  rpc CreateTable(CreateTableRequest)
+      returns (CreateTableResponse);
+
+  // 删除表
+  rpc DropTable(DropTableRequest)
+      returns (DropTableResponse);
+
+  // 获取表结构
+  rpc GetTableSchema(GetTableSchemaRequest)
+      returns (GetTableSchemaResponse);
+
+  // 列出所有表
+  rpc ListTables(ListTablesRequest)
+      returns (ListTablesResponse);
+
+
+  // ========== 路由查询（显式方法）==========
+
+  // 获取表的完整路由表
+  rpc GetRouteTable(GetRouteTableRequest)
+      returns (GetRouteTableResponse);
+
+  // 获取指定键的路由信息
+  rpc GetRouteForKey(GetRouteForKeyRequest)
+      returns (GetRouteForKeyResponse);
+
+  // 获取键范围的路由信息
+  rpc GetRoutesForRange(GetRoutesForRangeRequest)
+      returns (GetRoutesForRangeResponse);
+
+  // 客户端报告路由过期
+  rpc ReportStaleRoute(ReportStaleRouteRequest)
+      returns (ReportStaleRouteResponse);
+
+
+  // ========== 集群信息查询（显式方法）==========
+
+  // 获取集群健康状态
+  rpc GetClusterHealth(GetClusterHealthRequest)
+      returns (GetClusterHealthResponse);
+
+  // 获取集群统计信息
+  rpc GetClusterStats(GetClusterStatsRequest)
+      returns (GetClusterStatsResponse);
+}
+
+// ========================================
+// Request/Response 消息定义
+// ========================================
+
+// ========== RegionServer生命周期 ==========
+
+message RegisterRegionServerRequest {
+  string server_id = 1;          // 建议的服务器ID
+  string host = 2;
+  int32 port = 3;
+  int64 total_memory_mb = 4;
+  int32 cpu_cores = 5;
+  int64 disk_capacity_mb = 6;
+}
+
+message RegisterRegionServerResponse {
+  bool success = 1;
+  string assigned_server_id = 2; // Master分配的最终ID
+  int32 heartbeat_interval_ms = 3; // 心跳间隔（毫秒）
+  minisql.common.ErrorCode error_code = 4;
+  string error_message = 5;
+}
+
+message HeartbeatRequest {
+  string server_id = 1;
+  int64 timestamp = 2;
+  repeated string region_ids = 3; // 当前托管的Region列表
+  minisql.common.ServerMetrics metrics = 4;
+}
+
+message HeartbeatResponse {
+  bool acknowledged = 1;
+  repeated RegionCommand commands = 2; // Master下发的命令
+}
+
+message RegionCommand {
+  enum CommandType {
+    OPEN_REGION = 0;    // 打开Region
+    CLOSE_REGION = 1;   // 关闭Region
+    MIGRATE_REGION = 2; // 迁移Region
+  }
+  CommandType type = 1;
+  string region_id = 2;
+  minisql.common.RegionInfo region_info = 3; // OPEN时需要
+  string target_server = 4;                  // MIGRATE时需要
+}
+
+message UnregisterRegionServerRequest {
+  string server_id = 1;
+  string reason = 2; // "SHUTDOWN", "MAINTENANCE"
+}
+
+message UnregisterRegionServerResponse {
+  bool success = 1;
+  repeated string regions_to_migrate = 2;
+}
+
+// ========== Region分配管理 ==========
+
+message ReportRegionOnlineRequest {
+  string server_id = 1;
+  string region_id = 2;
+  int64 size_bytes = 3;
+  int64 row_count = 4;
+}
+
+message ReportRegionOnlineResponse {
+  bool acknowledged = 1;
+}
+
+message ReportRegionClosedRequest {
+  string server_id = 1;
+  string region_id = 2;
+}
+
+message ReportRegionClosedResponse {
+  bool acknowledged = 1;
+}
+
+// ========== Region分裂 ==========
+
+message ReportRegionSplitRequest {
+  string server_id = 1;
+  string parent_region_id = 2;
+  bytes split_key = 3;
+  minisql.common.RegionInfo left_region = 4;
+  minisql.common.RegionInfo right_region = 5;
+}
+
+message ReportRegionSplitResponse {
+  bool acknowledged = 1;
+  string target_server_for_right = 2; // 右Region的目标服务器
+}
+
+// ========== Region迁移 ==========
+
+message ReportMigrationProgressRequest {
+  string server_id = 1;
+  string region_id = 2;
+  string migration_id = 3;
+  enum MigrationPhase {
+    STARTED = 0;
+    DATA_COPIED = 1;
+    COMPLETED = 2;
+    FAILED = 3;
+  }
+  MigrationPhase phase = 4;
+  int64 bytes_transferred = 5;
+  string error_message = 6; // FAILED时填写
+}
+
+message ReportMigrationProgressResponse {
+  bool acknowledged = 1;
+  bool should_abort = 2; // Master可能要求中止迁移
+}
+
+// ========== 故障报告 ==========
+
+message ReportRegionFailureRequest {
+  string server_id = 1;
+  string region_id = 2;
+  enum FailureType {
+    CORRUPTION = 0;
+    REPLICA_SYNC_FAILED = 1;
+    DISK_ERROR = 2;
+    UNKNOWN_ERROR = 3;
+  }
+  FailureType failure_type = 3;
+  string details = 4;
+}
+
+message ReportRegionFailureResponse {
+  bool acknowledged = 1;
+  enum RecoveryAction {
+    NONE = 0;
+    RESTORE_FROM_REPLICA = 1;
+    MARK_OFFLINE = 2;
+    REASSIGN = 3;
+  }
+  RecoveryAction action = 4;
+}
+
+// ========== 管理操作（泛型） ==========
+
+message AdminOperationRequest {
+  string server_id = 1;
+  oneof operation {
+    ForceGCOperation force_gc = 10;
+    CompactRegionOperation compact_region = 11;
+    FlushRegionOperation flush_region = 12;
+    DebugDumpOperation debug_dump = 13;
+  }
+}
+
+message ForceGCOperation {
+  string region_id = 1;
+}
+
+message CompactRegionOperation {
+  string region_id = 1;
+}
+
+message FlushRegionOperation {
+  string region_id = 1;
+}
+
+message DebugDumpOperation {
+  string output_path = 1;
+}
+
+message AdminOperationResponse {
+  bool success = 1;
+  string message = 2;
+  bytes result_data = 3; // 操作结果数据
+}
+
+// ========================================
+// Client ↔ Master 消息定义
+// ========================================
+
+// ========== 表DDL ==========
+
+message CreateTableRequest {
+  minisql.common.TableSchema schema = 1;
+  int32 initial_region_count = 2; // 初始Region数量，默认1
+  int32 replica_count = 3;        // 副本数量，默认3
+}
+
+message CreateTableResponse {
+  bool success = 1;
+  minisql.common.ErrorCode error_code = 2;
+  string error_message = 3;
+  repeated minisql.common.RegionInfo initial_regions = 4;
+  int64 route_table_version = 5;
+}
+
+message DropTableRequest {
+  string table_name = 1;
+  bool force = 2; // 强制删除（即使有数据）
+}
+
+message DropTableResponse {
+  bool success = 1;
+  minisql.common.ErrorCode error_code = 2;
+  string error_message = 3;
+  int32 regions_dropped = 4;
+}
+
+message GetTableSchemaRequest {
+  string table_name = 1;
+}
+
+message GetTableSchemaResponse {
+  bool success = 1;
+  minisql.common.TableSchema schema = 2;
+  minisql.common.ErrorCode error_code = 3;
+  string error_message = 4;
+}
+
+message ListTablesRequest {
+  string pattern = 1; // 可选：表名模式匹配
+}
+
+message ListTablesResponse {
+  repeated string table_names = 1;
+  repeated minisql.common.TableSchema schemas = 2;
+}
+
+// ========== 路由查询 ==========
+
+message GetRouteTableRequest {
+  string table_name = 1;
+  int64 cached_version = 2; // 客户端缓存的版本，0表示无缓存
+}
+
+message GetRouteTableResponse {
+  bool success = 1;
+  minisql.common.RegionRouteTable route_table = 2;
+  bool cache_valid = 3; // true表示客户端缓存仍然有效
+  minisql.common.ErrorCode error_code = 4;
+  string error_message = 5;
+}
+
+message GetRouteForKeyRequest {
+  string table_name = 1;
+  bytes key = 2;
+}
+
+message GetRouteForKeyResponse {
+  bool success = 1;
+  minisql.common.RouteEntry route = 2;
+  int64 route_table_version = 3;
+  minisql.common.ErrorCode error_code = 4;
+  string error_message = 5;
+}
+
+message GetRoutesForRangeRequest {
+  string table_name = 1;
+  bytes start_key = 2;
+  bytes end_key = 3;
+}
+
+message GetRoutesForRangeResponse {
+  bool success = 1;
+  repeated minisql.common.RouteEntry routes = 2;
+  int64 route_table_version = 3;
+  minisql.common.ErrorCode error_code = 4;
+  string error_message = 5;
+}
+
+message ReportStaleRouteRequest {
+  string table_name = 1;
+  string region_id = 2;
+  string expected_server = 3;
+  int64 cached_version = 4;
+}
+
+message ReportStaleRouteResponse {
+  bool acknowledged = 1;
+  minisql.common.RouteEntry updated_route = 2;
+  int64 new_version = 3;
+}
+
+// ========== 集群信息 ==========
+
+message GetClusterHealthRequest {
+  // 空请求
+}
+
+message GetClusterHealthResponse {
+  enum HealthStatus {
+    HEALTHY = 0;
+    DEGRADED = 1;
+    CRITICAL = 2;
+  }
+  HealthStatus status = 1;
+  int32 total_servers = 2;
+  int32 online_servers = 3;
+  int32 total_regions = 4;
+  int32 online_regions = 5;
+  repeated string issues = 6; // 问题描述列表
+}
+
+message GetClusterStatsRequest {
+  // 空请求
+}
+
+message GetClusterStatsResponse {
+  int32 total_tables = 1;
+  int32 total_regions = 2;
+  int64 total_data_size_bytes = 3;
+  int64 total_row_count = 4;
+  double average_region_size_mb = 5;
+  int32 regions_splitting = 6;
+  int32 regions_migrating = 7;
+  int64 total_qps = 8;
+}

@@ -1,0 +1,324 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ClusterManager.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">MiniSQL Master</a> &gt; <a href="index.source.html" class="el_package">com.minisql.master.cluster</a> &gt; <span class="el_source">ClusterManager.java</span></div><h1>ClusterManager.java</h1><pre class="source lang-java linenums">package com.minisql.master.cluster;
+
+import com.minisql.common.proto.ServerState;
+import com.minisql.common.proto.ServerMetrics;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
+
+/**
+ * 集群管理器
+ *
+ * 负责管理所有RegionServer的注册、心跳、故障检测
+ */
+public class ClusterManager {
+
+<span class="fc" id="L21">    private static final Logger logger = LoggerFactory.getLogger(ClusterManager.class);</span>
+
+    // RegionServer信息映射: serverId -&gt; ServerInfo
+    private final Map&lt;String, ServerInfo&gt; servers;
+
+    // 读写锁保护servers映射
+    private final ReadWriteLock lock;
+
+    // 心跳超时时间（毫秒）
+    private final long heartbeatTimeoutMs;
+
+    // 心跳间隔（毫秒）
+    private final int heartbeatIntervalMs;
+
+<span class="fc" id="L35">    public ClusterManager(long heartbeatTimeoutMs, int heartbeatIntervalMs) {</span>
+<span class="fc" id="L36">        this.servers = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc" id="L37">        this.lock = new ReentrantReadWriteLock();</span>
+<span class="fc" id="L38">        this.heartbeatTimeoutMs = heartbeatTimeoutMs;</span>
+<span class="fc" id="L39">        this.heartbeatIntervalMs = heartbeatIntervalMs;</span>
+<span class="fc" id="L40">        logger.info(&quot;ClusterManager initialized: timeout={}ms, interval={}ms&quot;,</span>
+<span class="fc" id="L41">                heartbeatTimeoutMs, heartbeatIntervalMs);</span>
+<span class="fc" id="L42">    }</span>
+
+    /**
+     * 注册RegionServer
+     *
+     * @param serverId 建议的服务器ID
+     * @param host 主机地址
+     * @param port 端口
+     * @return 分配的服务器ID
+     */
+    public String registerServer(String serverId, String host, int port) {
+<span class="fc" id="L53">        lock.writeLock().lock();</span>
+        try {
+            // 检查是否已存在
+<span class="fc bfc" id="L56" title="All 2 branches covered.">            if (servers.containsKey(serverId)) {</span>
+<span class="fc" id="L57">                ServerInfo existing = servers.get(serverId);</span>
+<span class="pc bpc" id="L58" title="1 of 2 branches missed.">                if (existing.getState() == ServerState.SERVER_DEAD) {</span>
+                    // 死亡的服务器重新注册
+<span class="nc" id="L60">                    logger.info(&quot;Dead server re-registering: {}&quot;, serverId);</span>
+<span class="nc" id="L61">                    existing.setState(ServerState.SERVER_ONLINE);</span>
+<span class="nc" id="L62">                    existing.updateHeartbeat();</span>
+<span class="nc" id="L63">                    return serverId;</span>
+                } else {
+                    // 已存在且在线，生成新ID
+<span class="fc" id="L66">                    serverId = generateUniqueServerId(serverId);</span>
+<span class="fc" id="L67">                    logger.warn(&quot;Server ID conflict, assigned new ID: {}&quot;, serverId);</span>
+                }
+            }
+
+            // 创建新的ServerInfo
+<span class="fc" id="L72">            ServerInfo serverInfo = new ServerInfo(serverId, host, port);</span>
+<span class="fc" id="L73">            servers.put(serverId, serverInfo);</span>
+
+<span class="fc" id="L75">            logger.info(&quot;RegionServer registered: {} at {}:{}&quot;, serverId, host, port);</span>
+<span class="fc" id="L76">            return serverId;</span>
+
+        } finally {
+<span class="fc" id="L79">            lock.writeLock().unlock();</span>
+        }
+    }
+
+    /**
+     * 注销RegionServer
+     *
+     * @param serverId 服务器ID
+     * @return 是否成功
+     */
+    public boolean unregisterServer(String serverId) {
+<span class="fc" id="L90">        lock.writeLock().lock();</span>
+        try {
+<span class="fc" id="L92">            ServerInfo serverInfo = servers.get(serverId);</span>
+<span class="pc bpc" id="L93" title="1 of 2 branches missed.">            if (serverInfo == null) {</span>
+<span class="nc" id="L94">                logger.warn(&quot;Unregister failed: server not found: {}&quot;, serverId);</span>
+<span class="nc" id="L95">                return false;</span>
+            }
+
+<span class="fc" id="L98">            serverInfo.setState(ServerState.SERVER_OFFLINE);</span>
+<span class="fc" id="L99">            logger.info(&quot;RegionServer unregistered: {}&quot;, serverId);</span>
+<span class="fc" id="L100">            return true;</span>
+
+        } finally {
+<span class="fc" id="L103">            lock.writeLock().unlock();</span>
+        }
+    }
+
+    /**
+     * 更新心跳
+     *
+     * @param serverId 服务器ID
+     * @param metrics 服务器指标
+     * @return 是否成功
+     */
+    public boolean updateHeartbeat(String serverId, ServerMetrics metrics) {
+<span class="fc" id="L115">        lock.readLock().lock();</span>
+        try {
+<span class="fc" id="L117">            ServerInfo serverInfo = servers.get(serverId);</span>
+<span class="pc bpc" id="L118" title="1 of 2 branches missed.">            if (serverInfo == null) {</span>
+<span class="nc" id="L119">                logger.warn(&quot;Heartbeat failed: server not found: {}&quot;, serverId);</span>
+<span class="nc" id="L120">                return false;</span>
+            }
+
+<span class="fc" id="L123">            serverInfo.updateHeartbeat(metrics);</span>
+
+            // 如果服务器之前是DEAD状态，恢复为ONLINE
+<span class="pc bpc" id="L126" title="1 of 2 branches missed.">            if (serverInfo.getState() == ServerState.SERVER_DEAD) {</span>
+<span class="nc" id="L127">                serverInfo.setState(ServerState.SERVER_ONLINE);</span>
+<span class="nc" id="L128">                logger.info(&quot;Server recovered from DEAD state: {}&quot;, serverId);</span>
+            }
+
+<span class="fc" id="L131">            logger.debug(&quot;Heartbeat updated: {}&quot;, serverId);</span>
+<span class="fc" id="L132">            return true;</span>
+
+        } finally {
+<span class="fc" id="L135">            lock.readLock().unlock();</span>
+        }
+    }
+
+    /**
+     * 获取服务器信息
+     *
+     * @param serverId 服务器ID
+     * @return 服务器信息，不存在返回null
+     */
+    public ServerInfo getServerInfo(String serverId) {
+<span class="fc" id="L146">        lock.readLock().lock();</span>
+        try {
+<span class="fc" id="L148">            return servers.get(serverId);</span>
+        } finally {
+<span class="fc" id="L150">            lock.readLock().unlock();</span>
+        }
+    }
+
+    /**
+     * 获取所有在线服务器
+     *
+     * @return 在线服务器列表
+     */
+    public List&lt;ServerInfo&gt; getOnlineServers() {
+<span class="fc" id="L160">        lock.readLock().lock();</span>
+        try {
+<span class="fc" id="L162">            return servers.values().stream()</span>
+<span class="fc bfc" id="L163" title="All 2 branches covered.">                    .filter(s -&gt; s.getState() == ServerState.SERVER_ONLINE)</span>
+<span class="fc" id="L164">                    .collect(Collectors.toList());</span>
+        } finally {
+<span class="fc" id="L166">            lock.readLock().unlock();</span>
+        }
+    }
+
+    /**
+     * 获取所有服务器
+     *
+     * @return 所有服务器列表
+     */
+    public List&lt;ServerInfo&gt; getAllServers() {
+<span class="nc" id="L176">        lock.readLock().lock();</span>
+        try {
+<span class="nc" id="L178">            return new ArrayList&lt;&gt;(servers.values());</span>
+        } finally {
+<span class="nc" id="L180">            lock.readLock().unlock();</span>
+        }
+    }
+
+    /**
+     * 检查超时的服务器
+     *
+     * @return 超时的服务器ID列表
+     */
+    public List&lt;String&gt; checkTimeoutServers() {
+<span class="fc" id="L190">        lock.writeLock().lock();</span>
+        try {
+<span class="fc" id="L192">            List&lt;String&gt; timeoutServers = new ArrayList&lt;&gt;();</span>
+
+<span class="fc bfc" id="L194" title="All 2 branches covered.">            for (ServerInfo serverInfo : servers.values()) {</span>
+<span class="pc bpc" id="L195" title="1 of 2 branches missed.">                if (serverInfo.getState() == ServerState.SERVER_ONLINE &amp;&amp;</span>
+<span class="fc bfc" id="L196" title="All 2 branches covered.">                    serverInfo.isTimeout(heartbeatTimeoutMs)) {</span>
+
+<span class="fc" id="L198">                    serverInfo.setState(ServerState.SERVER_DEAD);</span>
+<span class="fc" id="L199">                    timeoutServers.add(serverInfo.getServerId());</span>
+
+<span class="fc" id="L201">                    logger.error(&quot;Server timeout detected: {}, last heartbeat: {}ms ago&quot;,</span>
+<span class="fc" id="L202">                            serverInfo.getServerId(),</span>
+<span class="fc" id="L203">                            System.currentTimeMillis() - serverInfo.getLastHeartbeatTime());</span>
+                }
+<span class="fc" id="L205">            }</span>
+
+<span class="fc" id="L207">            return timeoutServers;</span>
+
+        } finally {
+<span class="fc" id="L210">            lock.writeLock().unlock();</span>
+        }
+    }
+
+    /**
+     * 选择负载最低的服务器
+     *
+     * @return 负载最低的服务器，没有在线服务器返回null
+     */
+    public ServerInfo selectLeastLoadedServer() {
+<span class="fc" id="L220">        lock.readLock().lock();</span>
+        try {
+<span class="fc" id="L222">            return servers.values().stream()</span>
+<span class="pc bpc" id="L223" title="1 of 2 branches missed.">                    .filter(s -&gt; s.getState() == ServerState.SERVER_ONLINE)</span>
+<span class="fc" id="L224">                    .min(Comparator.comparingDouble(ServerInfo::getLoadScore))</span>
+<span class="fc" id="L225">                    .orElse(null);</span>
+        } finally {
+<span class="fc" id="L227">            lock.readLock().unlock();</span>
+        }
+    }
+
+    /**
+     * 添加Region到服务器
+     *
+     * @param serverId 服务器ID
+     * @param regionId Region ID
+     * @param size Region大小
+     */
+    public void addRegionToServer(String serverId, String regionId, long size) {
+<span class="fc" id="L239">        lock.readLock().lock();</span>
+        try {
+<span class="fc" id="L241">            ServerInfo serverInfo = servers.get(serverId);</span>
+<span class="pc bpc" id="L242" title="1 of 2 branches missed.">            if (serverInfo != null) {</span>
+<span class="fc" id="L243">                serverInfo.addRegion(regionId, size);</span>
+<span class="fc" id="L244">                logger.debug(&quot;Region {} added to server {}&quot;, regionId, serverId);</span>
+            }
+        } finally {
+<span class="fc" id="L247">            lock.readLock().unlock();</span>
+        }
+<span class="fc" id="L249">    }</span>
+
+    /**
+     * 从服务器移除Region
+     *
+     * @param serverId 服务器ID
+     * @param regionId Region ID
+     */
+    public void removeRegionFromServer(String serverId, String regionId) {
+<span class="fc" id="L258">        lock.readLock().lock();</span>
+        try {
+<span class="fc" id="L260">            ServerInfo serverInfo = servers.get(serverId);</span>
+<span class="pc bpc" id="L261" title="1 of 2 branches missed.">            if (serverInfo != null) {</span>
+<span class="fc" id="L262">                serverInfo.removeRegion(regionId);</span>
+<span class="fc" id="L263">                logger.debug(&quot;Region {} removed from server {}&quot;, regionId, serverId);</span>
+            }
+        } finally {
+<span class="fc" id="L266">            lock.readLock().unlock();</span>
+        }
+<span class="fc" id="L268">    }</span>
+
+    /**
+     * 获取集群统计信息
+     *
+     * @return 统计信息映射
+     */
+    public Map&lt;String, Object&gt; getClusterStats() {
+<span class="fc" id="L276">        lock.readLock().lock();</span>
+        try {
+<span class="fc" id="L278">            Map&lt;String, Object&gt; stats = new HashMap&lt;&gt;();</span>
+
+<span class="fc" id="L280">            long totalServers = servers.size();</span>
+<span class="fc" id="L281">            long onlineServers = servers.values().stream()</span>
+<span class="fc bfc" id="L282" title="All 2 branches covered.">                    .filter(s -&gt; s.getState() == ServerState.SERVER_ONLINE)</span>
+<span class="fc" id="L283">                    .count();</span>
+<span class="fc" id="L284">            long deadServers = servers.values().stream()</span>
+<span class="pc bpc" id="L285" title="1 of 2 branches missed.">                    .filter(s -&gt; s.getState() == ServerState.SERVER_DEAD)</span>
+<span class="fc" id="L286">                    .count();</span>
+
+<span class="fc" id="L288">            int totalRegions = servers.values().stream()</span>
+<span class="fc" id="L289">                    .mapToInt(ServerInfo::getRegionCount)</span>
+<span class="fc" id="L290">                    .sum();</span>
+
+<span class="fc" id="L292">            stats.put(&quot;totalServers&quot;, totalServers);</span>
+<span class="fc" id="L293">            stats.put(&quot;onlineServers&quot;, onlineServers);</span>
+<span class="fc" id="L294">            stats.put(&quot;deadServers&quot;, deadServers);</span>
+<span class="fc" id="L295">            stats.put(&quot;totalRegions&quot;, totalRegions);</span>
+
+<span class="fc" id="L297">            return stats;</span>
+
+        } finally {
+<span class="fc" id="L300">            lock.readLock().unlock();</span>
+        }
+    }
+
+    /**
+     * 获取心跳间隔
+     */
+    public int getHeartbeatIntervalMs() {
+<span class="fc" id="L308">        return heartbeatIntervalMs;</span>
+    }
+
+    /**
+     * 生成唯一的服务器ID
+     */
+    private String generateUniqueServerId(String baseId) {
+<span class="fc" id="L315">        int suffix = 1;</span>
+<span class="fc" id="L316">        String newId = baseId + &quot;-&quot; + suffix;</span>
+<span class="pc bpc" id="L317" title="1 of 2 branches missed.">        while (servers.containsKey(newId)) {</span>
+<span class="nc" id="L318">            suffix++;</span>
+<span class="nc" id="L319">            newId = baseId + &quot;-&quot; + suffix;</span>
+        }
+<span class="fc" id="L321">        return newId;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

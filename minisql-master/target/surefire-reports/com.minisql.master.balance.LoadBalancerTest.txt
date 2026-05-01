@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.minisql.master.balance.LoadBalancerTest
+-------------------------------------------------------------------------------
+Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 8.271 s -- in com.minisql.master.balance.LoadBalancerTest
