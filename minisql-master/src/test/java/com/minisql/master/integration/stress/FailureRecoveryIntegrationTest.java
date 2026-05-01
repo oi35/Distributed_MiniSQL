@@ -4,6 +4,7 @@ import com.minisql.master.MasterServer;
 import com.minisql.master.balance.MigrationTask;
 import com.minisql.master.balance.MigrationState;
 import com.minisql.master.integration.fixtures.FakeRegionServer;
+import com.minisql.common.proto.ServerState;
 import org.junit.*;
 import org.testcontainers.containers.GenericContainer;
 import static org.junit.Assert.*;
@@ -174,7 +175,7 @@ public class FailureRecoveryIntegrationTest {
                 .pollInterval(2, TimeUnit.SECONDS)
                 .until(() -> {
                     var info = masterServer.getClusterManager().getServerInfo("rs-recovery-003");
-                    return info == null || info.getState() != com.minisql.master.cluster.ServerState.ONLINE;
+                    return info == null || info.getState() != ServerState.SERVER_ONLINE;
                 });
 
         // Restart server
@@ -188,7 +189,7 @@ public class FailureRecoveryIntegrationTest {
         await().atMost(15, TimeUnit.SECONDS)
                 .until(() -> {
                     var info = masterServer.getClusterManager().getServerInfo("rs-recovery-003");
-                    return info != null && info.getState() == com.minisql.master.cluster.ServerState.ONLINE;
+                    return info != null && info.getState() == ServerState.SERVER_ONLINE;
                 });
 
         // Verify server is back online
