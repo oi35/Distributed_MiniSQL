@@ -1,5 +1,6 @@
 package com.minisql.master;
 
+import com.minisql.master.balance.*;
 import com.minisql.master.cluster.ClusterManager;
 import com.minisql.master.cluster.FailureRecoveryManager;
 import com.minisql.master.cluster.HeartbeatMonitor;
@@ -33,6 +34,10 @@ public class MasterServer {
     private final MetadataManager metadataManager;
     private final HeartbeatMonitor heartbeatMonitor;
     private final FailureRecoveryManager failureRecoveryManager;
+
+    // Balance组件
+    private final RegionMigrationManager migrationManager;
+    private final LoadBalancer loadBalancer;
 
     // Zookeeper组件
     private final ZookeeperClient zkClient;
@@ -71,6 +76,31 @@ public class MasterServer {
         // 初始化心跳监控器
         this.heartbeatMonitor = new HeartbeatMonitor(clusterManager, MONITOR_CHECK_INTERVAL_MS);
         this.heartbeatMonitor.setFailureHandler(failureRecoveryManager);
+
+        // 初始化迁移管理器
+        MigrationConfig migrationConfig = MigrationConfig.builder()
+                .maxRetries(3)
+                .prepareTimeoutMs(30000)
+                .syncTimeoutMs(60000)
+                .switchTimeoutMs(10000)
+                .build();
+        MigrationExecutor migrationExecutor = new MigrationExecutor();
+        this.migrationManager = new RegionMigrationManager(
+                clusterManager,
+                metadataManager,
+                migrationConfig,
+                migrationExecutor
+        );
+
+        // 初始化负载均衡器
+        LoadBalancerConfig lbConfig = new LoadBalancerConfig();
+        this.loadBalancer = new LoadBalancer(
+                clusterManager,
+                metadataManager,
+                migrationManager,
+                masterElection,
+                lbConfig
+        );
 
         // 构建gRPC服务器
         this.server = ServerBuilder.forPort(port)
@@ -135,6 +165,18 @@ public class MasterServer {
         heartbeatMonitor.start();
         logger.info("HeartbeatMonitor started");
 
+        // 启动迁移管理器
+        if (migrationManager != null) {
+            migrationManager.start();
+            logger.info("RegionMigrationManager started");
+        }
+
+        // 启动负载均衡器
+        if (loadBalancer != null) {
+            loadBalancer.start();
+            logger.info("LoadBalancer started");
+        }
+
         // 注册关闭钩子
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             logger.info("Shutting down Master server due to JVM shutdown");
@@ -150,6 +192,18 @@ public class MasterServer {
      * 停止服务
      */
     private void stopServices() {
+        // 停止负载均衡器
+        if (loadBalancer != null && loadBalancer.isRunning()) {
+            loadBalancer.stop();
+            logger.info("LoadBalancer stopped");
+        }
+
+        // 停止迁移管理器
+        if (migrationManager != null && migrationManager.isRunning()) {
+            migrationManager.stop();
+            logger.info("RegionMigrationManager stopped");
+        }
+
         // 停止心跳监控器
         if (heartbeatMonitor != null) {
             heartbeatMonitor.stop();
@@ -196,6 +250,88 @@ public class MasterServer {
         if (server != null) {
             server.awaitTermination();
         }
+    }
+
+    // ==================== Public Getters for Testing ====================
+
+    /**
+     * 检查当前节点是否是 Leader
+     * @return true 如果是 Leader，否则 false
+     */
+    public boolean isLeader() {
+        return masterElection != null && masterElection.isLeader();
+    }
+
+    /**
+     * 获取集群管理器
+     * @return ClusterManager 实例
+     */
+    public ClusterManager getClusterManager() {
+        return clusterManager;
+    }
+
+    /**
+     * 获取元数据管理器
+     * @return MetadataManager 实例
+     */
+    public MetadataManager getMetadataManager() {
+        return metadataManager;
+    }
+
+    /**
+     * 获取服务器端口
+     * @return 端口号
+     */
+    public int getPort() {
+        return port;
+    }
+
+    /**
+     * 获取服务器 ID
+     * @return 服务器 ID
+     */
+    public String getServerId() {
+        return serverId;
+    }
+
+    /**
+     * 获取 Master 选举管理器
+     * @return MasterElection 实例
+     */
+    public MasterElection getMasterElection() {
+        return masterElection;
+    }
+
+    /**
+     * 获取心跳监控器
+     * @return HeartbeatMonitor 实例
+     */
+    public HeartbeatMonitor getHeartbeatMonitor() {
+        return heartbeatMonitor;
+    }
+
+    /**
+     * 获取故障恢复管理器
+     * @return FailureRecoveryManager 实例
+     */
+    public FailureRecoveryManager getFailureRecoveryManager() {
+        return failureRecoveryManager;
+    }
+
+    /**
+     * 获取迁移管理器
+     * @return RegionMigrationManager 实例
+     */
+    public RegionMigrationManager getMigrationManager() {
+        return migrationManager;
+    }
+
+    /**
+     * 获取负载均衡器
+     * @return LoadBalancer 实例
+     */
+    public LoadBalancer getLoadBalancer() {
+        return loadBalancer;
     }
 
     /**

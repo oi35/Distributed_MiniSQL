@@ -11,7 +11,10 @@
       "Bash(xmllint --noout pom.xml)",
       "Bash(cat)",
       "Read(//tmp/**)",
-      "Bash(gh pr *)"
+      "Bash(gh pr *)",
+      "Bash(dos2unix -r minisql-regionserver/src/main/java/com/minisql/regionserver/service/RegionServerServiceImpl.java)",
+      "Bash(sed -i '1s/^\\\\xEF\\\\xBB\\\\xBF//' minisql-regionserver/src/main/java/com/minisql/regionserver/service/RegionServerServiceImpl.java)",
+      "Bash(mysql --version)"
     ]
   }
 }

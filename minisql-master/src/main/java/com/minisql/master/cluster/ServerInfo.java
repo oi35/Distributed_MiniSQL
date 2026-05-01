@@ -112,6 +112,14 @@ public class ServerInfo {
         this.state = state;
     }
 
+    /**
+     * 检查服务器是否在线
+     * @return true 如果服务器状态为 ONLINE，否则 false
+     */
+    public boolean isOnline() {
+        return state == ServerState.SERVER_ONLINE;
+    }
+
     public long getLastHeartbeatTime() {
         return lastHeartbeatTime;
     }
