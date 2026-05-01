@@ -1,4 +1,4 @@
-﻿package com.minisql.regionserver.service;
+package com.minisql.regionserver.service;
 
 import com.google.protobuf.ByteString;
 import com.minisql.regionserver.db.MySQLDatabase;
@@ -33,6 +33,15 @@ public class RegionServerServiceImpl extends RegionServerServiceGrpc.RegionServe
         this.regionServerId = regionServerId;
         this.database = new MySQLDatabase("jdbc:mysql://localhost:3306/minisql", "root", "password");
         logger.info("RegionServerServiceImpl initialized for {}", regionServerId);
+    }
+
+    public RegionServerServiceImpl(String regionServerId, java.util.Properties properties) {
+        this.regionServerId = regionServerId;
+        String jdbcUrl = properties.getProperty("mysql.url", "jdbc:mysql://localhost:3306/minisql");
+        String username = properties.getProperty("mysql.username", "root");
+        String password = properties.getProperty("mysql.password", "password");
+        this.database = new MySQLDatabase(jdbcUrl, username, password);
+        logger.info("RegionServerServiceImpl initialized for {} with custom properties", regionServerId);
     }
 
     public boolean put(String tableName, String regionId, String key, Map<String, byte[]> columns) {
@@ -212,7 +221,7 @@ public class RegionServerServiceImpl extends RegionServerServiceGrpc.RegionServe
                 return;
             }
 
-            boolean deleted = deleteRow(request.getTableName(), request.getKey());
+            boolean deleted = deleteRow(request.getTableName(), request.getKey().toByteArray());
 
             responseObserver.onNext(DeleteResponse.newBuilder()
                 .setSuccess(deleted)
@@ -346,7 +355,7 @@ public class RegionServerServiceImpl extends RegionServerServiceGrpc.RegionServe
             int deletedCount = 0;
             List<Boolean> results = new ArrayList<>();
             for (ByteString key : request.getKeysList()) {
-                boolean deleted = deleteRow(request.getTableName(), key);
+                boolean deleted = deleteRow(request.getTableName(), key.toByteArray());
                 results.add(deleted);
                 if (deleted) {
                     deletedCount++;
@@ -682,5 +691,18 @@ public class RegionServerServiceImpl extends RegionServerServiceGrpc.RegionServe
             this.sizeBytes = sizeBytes;
             this.rowCount = rowCount;
         }
+    }
+
+    /**
+     * Convert Map<String, byte[]> to Map<String, ByteString>
+     */
+    private Map<String, ByteString> toByteStringMap(Map<String, byte[]> byteArrayMap) {
+        Map<String, ByteString> result = new HashMap<>();
+        if (byteArrayMap != null) {
+            for (Map.Entry<String, byte[]> entry : byteArrayMap.entrySet()) {
+                result.put(entry.getKey(), ByteString.copyFrom(entry.getValue()));
+            }
+        }
+        return result;
     }
 }
