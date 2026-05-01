@@ -9,3 +9,7 @@ PROJECT_COMPLETION_REPORT.md
 # Maven build artifacts
 target/
 *.dumpstream
+
+# Work summaries and status documents
+INTEGRATION-TEST-*.md
+WORK-SUMMARY-*.md
