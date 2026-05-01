@@ -1,33 +1,20 @@
-2026-04-19 19:15:37.501 [com.minisql.regionserver.RegionServerMain.main()] INFO  [c.m.regionserver.RegionServerMain] - Starting RegionServer rs-001
-2026-04-19 19:15:37.501 [com.minisql.regionserver.RegionServerMain.main()] INFO  [c.m.r.s.RegionServerServiceImpl] - RegionServerServiceImpl initialized for rs-001
-2026-04-19 19:15:37.501 [com.minisql.regionserver.RegionServerMain.main()] INFO  [c.m.regionserver.RegionServerMain] - RegionServer rs-001 initialized
-2026-04-19 19:15:37.501 [com.minisql.regionserver.RegionServerMain.main()] INFO  [c.m.regionserver.RegionServerMain] - RegionServer rs-001 started
-2026-04-19 19:15:52.232 [com.minisql.regionserver.RegionServerMain.main()] INFO  [c.m.r.s.RegionServerServiceImpl] - PUT operation: table=users, region=region-001, key=user001
-2026-04-19 19:15:52.232 [com.minisql.regionserver.RegionServerMain.main()] INFO  [c.m.r.s.RegionServerServiceImpl] - PUT operation completed successfully
-2026-04-19 19:16:02.462 [com.minisql.regionserver.RegionServerMain.main()] INFO  [c.m.r.s.RegionServerServiceImpl] - GET operation: table=users, region=region-001, key=user001
-2026-04-19 19:16:02.462 [com.minisql.regionserver.RegionServerMain.main()] INFO  [c.m.r.s.RegionServerServiceImpl] - GET operation completed successfully
-2026-04-19 19:16:08.320 [com.minisql.regionserver.RegionServerMain.main()] INFO  [c.m.r.s.RegionServerServiceImpl] - EXISTS operation: table=users, region=region-001, key=user001
-2026-04-19 19:16:08.320 [com.minisql.regionserver.RegionServerMain.main()] INFO  [c.m.r.s.RegionServerServiceImpl] - EXISTS operation completed, exists=true
-2026-04-19 19:16:20.183 [com.minisql.regionserver.RegionServerMain.main()] INFO  [c.m.r.s.RegionServerServiceImpl] - DELETE operation: table=users, region=region-001, key=user001
-2026-04-19 19:16:20.183 [com.minisql.regionserver.RegionServerMain.main()] INFO  [c.m.r.s.RegionServerServiceImpl] - DELETE operation completed successfully, existed=true
-2026-04-19 19:16:29.416 [com.minisql.regionserver.RegionServerMain.main()] INFO  [c.m.r.s.RegionServerServiceImpl] - EXISTS operation: table=users, region=region-001, key=user001
-2026-04-19 19:16:29.416 [com.minisql.regionserver.RegionServerMain.main()] INFO  [c.m.r.s.RegionServerServiceImpl] - EXISTS operation completed, exists=false
-2026-04-19 19:16:40.829 [com.minisql.regionserver.RegionServerMain.main()] INFO  [c.m.regionserver.RegionServerMain] - RegionServer rs-001 stopped
-2026-04-19 19:17:35.596 [main] INFO  [c.m.regionserver.RegionServerMain] - Starting RegionServer rs-001
-2026-04-19 19:17:35.599 [main] INFO  [c.m.r.s.RegionServerServiceImpl] - RegionServerServiceImpl initialized for rs-001
-2026-04-19 19:17:35.599 [main] INFO  [c.m.regionserver.RegionServerMain] - RegionServer rs-001 initialized
-2026-04-19 19:17:35.599 [main] INFO  [c.m.regionserver.RegionServerMain] - RegionServer rs-001 started
-2026-04-19 19:17:40.928 [main] INFO  [c.m.regionserver.RegionServerMain] - RegionServer rs-001 stopped
-2026-04-19 19:20:19.197 [main] INFO  [c.m.regionserver.RegionServerMain] - Starting RegionServer rs-001
-2026-04-19 19:20:19.202 [main] INFO  [c.m.r.s.RegionServerServiceImpl] - RegionServerServiceImpl initialized for rs-001
-2026-04-19 19:20:19.202 [main] INFO  [c.m.regionserver.RegionServerMain] - RegionServer rs-001 initialized
-2026-04-19 19:20:19.202 [main] INFO  [c.m.regionserver.RegionServerMain] - RegionServer rs-001 started
-2026-04-19 19:20:59.335 [main] INFO  [c.m.r.s.RegionServerServiceImpl] - PUT operation: table=users, region=region-001, key=user001
-2026-04-19 19:20:59.335 [main] INFO  [c.m.r.s.RegionServerServiceImpl] - PUT operation completed successfully
-2026-04-19 19:21:12.851 [main] INFO  [c.m.r.s.RegionServerServiceImpl] - GET operation: table=users, region=region-001, key=user001
-2026-04-19 19:21:12.851 [main] INFO  [c.m.r.s.RegionServerServiceImpl] - GET operation completed successfully
-2026-04-19 19:21:24.161 [main] INFO  [c.m.r.s.RegionServerServiceImpl] - EXISTS operation: table=users, region=region-001, key=user001
-2026-04-19 19:21:24.161 [main] INFO  [c.m.r.s.RegionServerServiceImpl] - EXISTS operation completed, exists=true
-2026-04-19 19:21:41.626 [main] INFO  [c.m.r.s.RegionServerServiceImpl] - DELETE operation: table=users, region=region-001, key=user001
-2026-04-19 19:21:41.626 [main] INFO  [c.m.r.s.RegionServerServiceImpl] - DELETE operation completed successfully, existed=true
-2026-04-19 19:21:45.812 [main] INFO  [c.m.regionserver.RegionServerMain] - RegionServer rs-001 stopped
+2026-05-01 11:46:23.935 [com.minisql.regionserver.RegionServerMain.main()] INFO  [c.m.regionserver.RegionServerMain] - Starting RegionServer rs-001 on port 8001
+2026-05-01 11:46:23.953 [com.minisql.regionserver.RegionServerMain.main()] INFO  [c.m.regionserver.RegionServerMain] - RegionServer rs-001 initialized on port 8001
+2026-05-01 11:46:24.269 [com.minisql.regionserver.RegionServerMain.main()] INFO  [c.m.regionserver.RegionServerMain] - RegionServer rs-001 started on port 8001
+2026-05-01 11:47:50.701 [com.minisql.regionserver.RegionServerMain.main()] INFO  [c.m.regionserver.RegionServerMain] - RegionServer rs-001 stopped
+2026-05-01 14:06:27.512 [main] INFO  [c.m.r.s.RegionServerServiceImpl] - Replayed 1 WAL records for RegionServer rs-wal
+2026-05-01 14:06:27.571 [main] INFO  [c.m.r.s.RegionServerServiceImpl] - Replayed 3 WAL records for RegionServer rs-test
+2026-05-01 14:06:27.587 [main] INFO  [c.m.r.s.RegionServerServiceImpl] - Replayed 4 WAL records for RegionServer rs-test
+2026-05-01 14:06:27.596 [main] INFO  [c.m.r.s.RegionServerServiceImpl] - Replayed 5 WAL records for RegionServer rs-test
+2026-05-01 14:06:27.598 [main] INFO  [c.m.r.s.RegionServerServiceImpl] - Replayed 5 WAL records for RegionServer rs-test
+2026-05-01 14:06:27.618 [main] INFO  [c.m.r.s.RegionServerServiceImpl] - Replayed 7 WAL records for RegionServer rs-test
+2026-05-01 14:07:00.911 [main] INFO  [c.m.r.s.RegionServerServiceImpl] - Replayed 7 WAL records for RegionServer rs-test
+2026-05-01 14:07:00.970 [main] INFO  [c.m.r.s.RegionServerServiceImpl] - Replayed 1 WAL records for RegionServer rs-wal
+2026-05-01 14:07:00.981 [main] INFO  [c.m.r.s.RegionServerServiceImpl] - Replayed 7 WAL records for RegionServer rs-test
+2026-05-01 14:07:01.073 [main] INFO  [c.m.r.s.RegionServerServiceImpl] - Replayed 10 WAL records for RegionServer rs-test
+2026-05-01 14:07:01.092 [main] INFO  [c.m.r.s.RegionServerServiceImpl] - Replayed 11 WAL records for RegionServer rs-test
+2026-05-01 14:07:01.103 [main] INFO  [c.m.r.s.RegionServerServiceImpl] - Replayed 12 WAL records for RegionServer rs-test
+2026-05-01 14:07:01.105 [main] INFO  [c.m.r.s.RegionServerServiceImpl] - Replayed 12 WAL records for RegionServer rs-test
+2026-05-01 14:07:01.127 [main] INFO  [c.m.r.s.RegionServerServiceImpl] - Replayed 14 WAL records for RegionServer rs-test
+2026-05-01 14:07:32.171 [main] INFO  [c.m.r.s.RegionServerServiceImpl] - Replayed 1 WAL records for RegionServer rs-wal
+2026-05-01 14:33:54.393 [main] INFO  [c.m.r.s.RegionServerServiceImpl] - Replayed 1 WAL records for RegionServer rs-wal

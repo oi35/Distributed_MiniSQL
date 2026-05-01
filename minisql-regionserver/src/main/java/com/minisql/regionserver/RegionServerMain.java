@@ -1,40 +1,51 @@
 package com.minisql.regionserver;
 
 import com.minisql.regionserver.service.RegionServerServiceImpl;
+import io.grpc.Server;
+import io.grpc.ServerBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Properties;
 
 /**
- * RegionServer主类
- *
- * 启动RegionServer并提供命令行界面进行测试
+ * RegionServer main entry with gRPC server and a small CLI for local testing.
  */
 public class RegionServerMain {
 
     private static final Logger logger = LoggerFactory.getLogger(RegionServerMain.class);
+    private static final int DEFAULT_PORT = 8001;
 
     private final String regionServerId;
+    private final int port;
     private final RegionServerServiceImpl service;
+    private Server grpcServer;
 
-    public RegionServerMain(String regionServerId) {
+    public RegionServerMain(String regionServerId, int port, Properties properties) {
         this.regionServerId = regionServerId;
-        this.service = new RegionServerServiceImpl(regionServerId);
-        logger.info("RegionServer {} initialized", regionServerId);
+        this.port = port;
+        this.service = new RegionServerServiceImpl(regionServerId, properties);
+        logger.info("RegionServer {} initialized on port {}", regionServerId, port);
     }
 
-    /**
-     * 启动RegionServer
-     */
-    public void start() {
-        logger.info("RegionServer {} started", regionServerId);
+    public void start() throws IOException {
+        grpcServer = ServerBuilder.forPort(port)
+                .addService(service)
+                .build()
+                .start();
+
+        Runtime.getRuntime().addShutdownHook(new Thread(this::stop));
+
+        logger.info("RegionServer {} started on port {}", regionServerId, port);
         System.out.println("=====================================");
-        System.out.println("  RegionServer " + regionServerId + " Started");
+        System.out.println("  RegionServer " + regionServerId + " Started on port " + port);
         System.out.println("=====================================");
         System.out.println("Available commands:");
         System.out.println("  put <table> <key> <column>=<value> [column2=value2...]");
@@ -46,18 +57,15 @@ public class RegionServerMain {
         System.out.println("=====================================");
     }
 
-    /**
-     * 停止RegionServer
-     */
     public void stop() {
+        if (grpcServer != null) {
+            grpcServer.shutdown();
+        }
         logger.info("RegionServer {} stopped", regionServerId);
     }
 
-    /**
-     * 运行命令行界面
-     */
     public void runCommandLine() {
-        BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+        BufferedReader reader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
 
         try {
             while (true) {
@@ -80,15 +88,13 @@ public class RegionServerMain {
         }
     }
 
-    /**
-     * 处理命令
-     */
     private void processCommand(String command) {
         String[] parts = command.split("\\s+");
-        if (parts.length == 0) return;
+        if (parts.length == 0) {
+            return;
+        }
 
         String cmd = parts[0].toLowerCase();
-
         switch (cmd) {
             case "put":
                 handlePut(parts);
@@ -120,11 +126,10 @@ public class RegionServerMain {
         String table = parts[1];
         String key = parts[2];
         Map<String, byte[]> columns = new HashMap<>();
-
         for (int i = 3; i < parts.length; i++) {
             String[] kv = parts[i].split("=", 2);
             if (kv.length == 2) {
-                columns.put(kv[0], kv[1].getBytes());
+                columns.put(kv[0], kv[1].getBytes(StandardCharsets.UTF_8));
             }
         }
 
@@ -138,17 +143,15 @@ public class RegionServerMain {
             return;
         }
 
-        String table = parts[1];
-        String key = parts[2];
-
-        Map<String, byte[]> result = service.get(table, "region-001", key);
+        Map<String, byte[]> result = service.get(parts[1], "region-001", parts[2]);
         if (result == null) {
             System.out.println("Key not found");
-        } else {
-            System.out.println("Data:");
-            for (Map.Entry<String, byte[]> entry : result.entrySet()) {
-                System.out.println("  " + entry.getKey() + " = " + new String(entry.getValue()));
-            }
+            return;
+        }
+
+        System.out.println("Data:");
+        for (Map.Entry<String, byte[]> entry : result.entrySet()) {
+            System.out.println("  " + entry.getKey() + " = " + new String(entry.getValue(), StandardCharsets.UTF_8));
         }
     }
 
@@ -158,10 +161,7 @@ public class RegionServerMain {
             return;
         }
 
-        String table = parts[1];
-        String key = parts[2];
-
-        boolean existed = service.delete(table, "region-001", key);
+        boolean existed = service.delete(parts[1], "region-001", parts[2]);
         System.out.println(existed ? "DELETE successful (key existed)" : "DELETE: key not found");
     }
 
@@ -171,10 +171,7 @@ public class RegionServerMain {
             return;
         }
 
-        String table = parts[1];
-        String key = parts[2];
-
-        boolean exists = service.exists(table, "region-001", key);
+        boolean exists = service.exists(parts[1], "region-001", parts[2]);
         System.out.println(exists ? "Key exists" : "Key not found");
     }
 
@@ -183,40 +180,63 @@ public class RegionServerMain {
             System.out.println("Usage: list <table>");
             return;
         }
-
-        String table = parts[1];
-        System.out.println("List command not implemented yet");
-        // TODO: 实现列出表中所有key的功能
+        System.out.println("List command is reserved for a future scan/list implementation");
     }
 
-    /**
-     * 主入口
-     */
     public static void main(String[] args) {
-        // 默认值
-        String regionServerId = "rs-001";
+        Properties properties = loadProperties();
+        String regionServerId = properties.getProperty("regionserver.id", "rs-001");
+        int port = parsePort(properties.getProperty("regionserver.port"), DEFAULT_PORT);
 
-        // 从命令行参数读取
         if (args.length >= 1) {
             regionServerId = args[0];
         }
+        if (args.length >= 2) {
+            port = parsePort(args[1], port);
+        }
 
-        // 从环境变量读取
         String idEnv = System.getenv("REGIONSERVER_ID");
         if (idEnv != null && !idEnv.isEmpty()) {
             regionServerId = idEnv;
         }
+        String portEnv = System.getenv("REGIONSERVER_PORT");
+        if (portEnv != null && !portEnv.isEmpty()) {
+            port = parsePort(portEnv, port);
+        }
 
-        logger.info("Starting RegionServer {}", regionServerId);
-
-        RegionServerMain regionServer = new RegionServerMain(regionServerId);
-
+        logger.info("Starting RegionServer {} on port {}", regionServerId, port);
+        RegionServerMain regionServer = new RegionServerMain(regionServerId, port, properties);
         try {
             regionServer.start();
             regionServer.runCommandLine();
         } catch (Exception e) {
             logger.error("RegionServer {} failed", regionServerId, e);
             System.exit(1);
+        }
+    }
+
+    private static Properties loadProperties() {
+        Properties properties = new Properties();
+        try (InputStream inputStream = RegionServerMain.class.getClassLoader()
+                .getResourceAsStream("regionserver.conf")) {
+            if (inputStream != null) {
+                properties.load(inputStream);
+            }
+        } catch (IOException e) {
+            logger.warn("Failed to load regionserver.conf, using defaults", e);
+        }
+        return properties;
+    }
+
+    private static int parsePort(String value, int fallback) {
+        if (value == null || value.isEmpty()) {
+            return fallback;
+        }
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException ex) {
+            logger.warn("Invalid port {}, using {}", value, fallback);
+            return fallback;
         }
     }
 }
