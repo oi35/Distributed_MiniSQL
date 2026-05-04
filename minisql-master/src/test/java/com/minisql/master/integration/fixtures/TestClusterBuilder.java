@@ -27,6 +27,7 @@ public class TestClusterBuilder {
             throw new IllegalStateException("Zookeeper not configured");
         }
         MasterServer master = new MasterServer(masterPort, masterId, zkServer.getConnectString());
+        master.start(); // 启动 Master 服务器
         return new TestCluster(zkServer, master);
     }
 }

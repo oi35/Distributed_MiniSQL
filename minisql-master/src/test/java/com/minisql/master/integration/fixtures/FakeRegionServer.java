@@ -38,6 +38,16 @@ public class FakeRegionServer {
         stub = MasterServiceGrpc.newBlockingStub(channel);
     }
 
+    public RegisterRegionServerResponse register(String host, int port) {
+        RegisterRegionServerRequest request = RegisterRegionServerRequest.newBuilder()
+                .setServerId(serverId)
+                .setHost(host)
+                .setPort(port)
+                .build();
+
+        return stub.registerRegionServer(request);
+    }
+
     public void stop() {
         if (channel != null) {
             try {

@@ -31,6 +31,9 @@ public class MasterRegionServerIntegrationTest {
         // Wait for Master to become leader
         await().atMost(10, TimeUnit.SECONDS)
                 .until(() -> cluster.getMasterServer().isLeader());
+
+        // Wait a bit more for gRPC server to fully start
+        Thread.sleep(2000);
     }
 
     @After
@@ -55,7 +58,10 @@ public class MasterRegionServerIntegrationTest {
         regionServer1 = new FakeRegionServer("rs-001");
         regionServer1.start(8000);
 
-        // Send heartbeat to register
+        // Register with Master
+        regionServer1.register("localhost", 9001);
+
+        // Send heartbeat to update status
         regionServer1.heartbeat();
 
         // Verify registration in ClusterManager
@@ -74,6 +80,7 @@ public class MasterRegionServerIntegrationTest {
         // Register RegionServer
         regionServer1 = new FakeRegionServer("rs-001");
         regionServer1.start(8000);
+        regionServer1.register("localhost", 9001);
         regionServer1.heartbeat();
 
         ClusterManager clusterManager = cluster.getMasterServer().getClusterManager();
@@ -106,6 +113,7 @@ public class MasterRegionServerIntegrationTest {
         // Register RegionServer
         regionServer1 = new FakeRegionServer("rs-001");
         regionServer1.start(8000);
+        regionServer1.register("localhost", 9001);
         regionServer1.heartbeat();
 
         ClusterManager clusterManager = cluster.getMasterServer().getClusterManager();
@@ -134,10 +142,12 @@ public class MasterRegionServerIntegrationTest {
         // Register two RegionServers
         regionServer1 = new FakeRegionServer("rs-001");
         regionServer1.start(8000);
+        regionServer1.register("localhost", 9001);
         regionServer1.heartbeat();
 
         regionServer2 = new FakeRegionServer("rs-002");
         regionServer2.start(8000);
+        regionServer2.register("localhost", 9002);
         regionServer2.heartbeat();
 
         ClusterManager clusterManager = cluster.getMasterServer().getClusterManager();
