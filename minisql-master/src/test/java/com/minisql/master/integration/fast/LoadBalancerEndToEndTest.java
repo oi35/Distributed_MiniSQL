@@ -31,6 +31,7 @@ public class LoadBalancerEndToEndTest {
         metadataManager = new MetadataManager();
 
         MigrationConfig config = MigrationConfig.builder()
+                .checkPeriodMs(1000)  // Check every 1 second for faster tests
                 .maxRetries(3)
                 .prepareTimeoutMs(5000)
                 .syncTimeoutMs(10000)

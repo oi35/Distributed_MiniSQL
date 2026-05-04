@@ -125,8 +125,8 @@ public class MasterRegionServerIntegrationTest {
                 clusterManager.getServerInfo("rs-001").isOnline());
 
         // Stop sending heartbeats (simulate failure)
-        // Wait for heartbeat timeout (default 30 seconds)
-        await().atMost(35, TimeUnit.SECONDS)
+        // Wait for heartbeat timeout (default 30 seconds) + monitor check interval (10 seconds)
+        await().atMost(45, TimeUnit.SECONDS)
                 .pollInterval(2, TimeUnit.SECONDS)
                 .until(() -> {
                     ServerInfo info = clusterManager.getServerInfo("rs-001");
