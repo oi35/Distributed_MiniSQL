@@ -14,7 +14,11 @@
       "Bash(gh pr *)",
       "Bash(dos2unix -r minisql-regionserver/src/main/java/com/minisql/regionserver/service/RegionServerServiceImpl.java)",
       "Bash(sed -i '1s/^\\\\xEF\\\\xBB\\\\xBF//' minisql-regionserver/src/main/java/com/minisql/regionserver/service/RegionServerServiceImpl.java)",
-      "Bash(mysql --version)"
+      "Bash(mysql --version)",
+      "Bash(docker --version)",
+      "Bash(sed -i 's/rs1\\\\.start\\(8300\\);$/rs1.start\\(8300\\);\\\\n        rs1.register\\(\"localhost\", 9201\\);/' FailureRecoveryIntegrationTest.java)",
+      "Bash(sed -i 's/rs2\\\\.start\\(8300\\);$/rs2.start\\(8300\\);\\\\n        rs2.register\\(\"localhost\", 9202\\);/' FailureRecoveryIntegrationTest.java)",
+      "Bash(sed -i 's/rs\\\\.start\\(8300\\);$/rs.start\\(8300\\);\\\\n        rs.register\\(\"localhost\", 9203\\);/' FailureRecoveryIntegrationTest.java)"
     ]
   }
 }

@@ -129,6 +129,7 @@ public class EndToEndFailoverTest {
         // Start RegionServer and connect to leader
         regionServer = new FakeRegionServer("rs-failover-001");
         regionServer.start(leader.getPort());
+        regionServer.register("localhost", 9101);
         regionServer.heartbeat();
 
         // Wait for registration

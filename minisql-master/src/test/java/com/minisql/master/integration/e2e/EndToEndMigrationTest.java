@@ -66,11 +66,13 @@ public class EndToEndMigrationTest {
         // Start two FakeRegionServers with real gRPC
         regionServer1 = new FakeRegionServer("rs-e2e-001");
         regionServer1.start(8000);
+        regionServer1.register("localhost", 9001);
         regionServer1.addRegion("region-001", 100 * 1024 * 1024);
         regionServer1.heartbeat();
 
         regionServer2 = new FakeRegionServer("rs-e2e-002");
         regionServer2.start(8000);
+        regionServer2.register("localhost", 9002);
         regionServer2.heartbeat();
 
         // Wait for both servers to register
@@ -109,11 +111,13 @@ public class EndToEndMigrationTest {
         // Start RegionServers with simulated data
         regionServer1 = new FakeRegionServer("rs-e2e-003");
         regionServer1.start(8000);
+        regionServer1.register("localhost", 9003);
         regionServer1.addRegion("region-002", 200 * 1024 * 1024); // 200MB region
         regionServer1.heartbeat();
 
         regionServer2 = new FakeRegionServer("rs-e2e-004");
         regionServer2.start(8000);
+        regionServer2.register("localhost", 9004);
         regionServer2.heartbeat();
 
         // Wait for registration
@@ -149,6 +153,7 @@ public class EndToEndMigrationTest {
         // Start RegionServers
         regionServer1 = new FakeRegionServer("rs-e2e-005");
         regionServer1.start(8000);
+        regionServer1.register("localhost", 9005);
         regionServer1.addRegion("region-003", 100 * 1024 * 1024);
         regionServer1.addRegion("region-004", 100 * 1024 * 1024);
         regionServer1.addRegion("region-005", 100 * 1024 * 1024);
@@ -156,6 +161,7 @@ public class EndToEndMigrationTest {
 
         regionServer2 = new FakeRegionServer("rs-e2e-006");
         regionServer2.start(8000);
+        regionServer2.register("localhost", 9006);
         regionServer2.heartbeat();
 
         // Wait for registration
@@ -202,12 +208,14 @@ public class EndToEndMigrationTest {
         // Start RegionServers with slow mode
         regionServer1 = new FakeRegionServer("rs-e2e-007");
         regionServer1.start(8000);
+        regionServer1.register("localhost", 9007);
         regionServer1.addRegion("region-006", 100 * 1024 * 1024);
         regionServer1.setFailureMode(FakeRegionServer.FailureMode.SLOW); // Simulate slow network
         regionServer1.heartbeat();
 
         regionServer2 = new FakeRegionServer("rs-e2e-008");
         regionServer2.start(8000);
+        regionServer2.register("localhost", 9008);
         regionServer2.heartbeat();
 
         // Wait for registration

@@ -69,12 +69,14 @@ public class FailureRecoveryIntegrationTest {
         // Start two RegionServers
         FakeRegionServer rs1 = new FakeRegionServer("rs-recovery-001");
         rs1.start(8300);
+        rs1.register("localhost", 9201);
         rs1.addRegion("region-crash-001", 100 * 1024 * 1024);
         rs1.heartbeat();
         regionServers.add(rs1);
 
         FakeRegionServer rs2 = new FakeRegionServer("rs-recovery-002");
         rs2.start(8300);
+        rs2.register("localhost", 9202);
         rs2.heartbeat();
         regionServers.add(rs2);
 
@@ -120,6 +122,7 @@ public class FailureRecoveryIntegrationTest {
         for (int i = 0; i < 5; i++) {
             FakeRegionServer rs = new FakeRegionServer("rs-multi-fail-" + i);
             rs.start(8300);
+            rs.register("localhost", 9310 + i);
             rs.addRegion("region-multi-" + i, 100 * 1024 * 1024);
             rs.heartbeat();
             regionServers.add(rs);
@@ -156,6 +159,7 @@ public class FailureRecoveryIntegrationTest {
         // Start RegionServer
         FakeRegionServer rs = new FakeRegionServer("rs-recovery-003");
         rs.start(8300);
+        rs.register("localhost", 9320);
         rs.addRegion("region-recovery-001", 100 * 1024 * 1024);
         rs.heartbeat();
         regionServers.add(rs);
@@ -181,6 +185,7 @@ public class FailureRecoveryIntegrationTest {
         // Restart server
         FakeRegionServer newRs = new FakeRegionServer("rs-recovery-003");
         newRs.start(8300);
+        newRs.register("localhost", 9320);
         newRs.addRegion("region-recovery-001", 100 * 1024 * 1024);
         newRs.heartbeat();
         regionServers.add(newRs);
@@ -203,6 +208,7 @@ public class FailureRecoveryIntegrationTest {
         for (int i = 0; i < 4; i++) {
             FakeRegionServer rs = new FakeRegionServer("rs-cascade-" + i);
             rs.start(8300);
+            rs.register("localhost", 9330 + i);
             rs.addRegion("region-cascade-" + i, 100 * 1024 * 1024);
             rs.heartbeat();
             regionServers.add(rs);
@@ -242,6 +248,7 @@ public class FailureRecoveryIntegrationTest {
         for (int i = 0; i < 3; i++) {
             FakeRegionServer rs = new FakeRegionServer("rs-partition-" + i);
             rs.start(8300);
+            rs.register("localhost", 9340 + i);
             rs.addRegion("region-partition-" + i, 100 * 1024 * 1024);
             rs.heartbeat();
             regionServers.add(rs);
@@ -293,11 +300,13 @@ public class FailureRecoveryIntegrationTest {
         // Start 2 RegionServers
         FakeRegionServer rs1 = new FakeRegionServer("rs-load-001");
         rs1.start(8300);
+        rs1.register("localhost", 9201);
         rs1.heartbeat();
         regionServers.add(rs1);
 
         FakeRegionServer rs2 = new FakeRegionServer("rs-load-002");
         rs2.start(8300);
+        rs2.register("localhost", 9202);
         rs2.heartbeat();
         regionServers.add(rs2);
 
