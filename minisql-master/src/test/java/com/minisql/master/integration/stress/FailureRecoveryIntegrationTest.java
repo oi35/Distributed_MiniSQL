@@ -100,7 +100,7 @@ public class FailureRecoveryIntegrationTest {
         rs1.stop();
 
         // Wait for migration to fail or complete
-        await().atMost(40, TimeUnit.SECONDS)
+        await().atMost(60, TimeUnit.SECONDS)
                 .pollInterval(1, TimeUnit.SECONDS)
                 .until(() -> {
                     MigrationTask task = masterServer.getMigrationManager().getTask(taskId);
@@ -142,7 +142,8 @@ public class FailureRecoveryIntegrationTest {
         }
 
         // Wait for Master to detect failures
-        await().atMost(40, TimeUnit.SECONDS)
+        // Heartbeat timeout is 30s + monitor check interval 10s = need at least 45s
+        await().atMost(60, TimeUnit.SECONDS)
                 .pollInterval(2, TimeUnit.SECONDS)
                 .until(() -> masterServer.getClusterManager().getOnlineServers().size() == 2);
 
@@ -175,7 +176,7 @@ public class FailureRecoveryIntegrationTest {
         rs.stop();
 
         // Wait for Master to detect failure
-        await().atMost(40, TimeUnit.SECONDS)
+        await().atMost(60, TimeUnit.SECONDS)
                 .pollInterval(2, TimeUnit.SECONDS)
                 .until(() -> {
                     var info = masterServer.getClusterManager().getServerInfo("rs-recovery-003");
@@ -233,7 +234,7 @@ public class FailureRecoveryIntegrationTest {
         }
 
         // Wait for Master to detect all failures
-        await().atMost(40, TimeUnit.SECONDS)
+        await().atMost(60, TimeUnit.SECONDS)
                 .until(() -> masterServer.getClusterManager().getOnlineServers().size() == 1);
 
         // Verify system is still operational with 1 server
@@ -337,7 +338,7 @@ public class FailureRecoveryIntegrationTest {
         }
 
         // Wait for failure detection
-        await().atMost(40, TimeUnit.SECONDS)
+        await().atMost(60, TimeUnit.SECONDS)
                 .until(() -> masterServer.getClusterManager().getOnlineServers().size() == 1);
 
         // Verify Master handled load during failure
