@@ -51,7 +51,18 @@ public class MasterServer {
     private static final String DEFAULT_ZK_CONNECT = "localhost:2181";
     private static final int ZK_SESSION_TIMEOUT = 30000; // 30秒
 
+    /**
+     * 构造函数（使用默认超时配置）
+     */
     public MasterServer(int port, String serverId, String zkConnect) {
+        this(port, serverId, zkConnect, HEARTBEAT_TIMEOUT_MS, MONITOR_CHECK_INTERVAL_MS);
+    }
+
+    /**
+     * 构造函数（自定义超时配置，用于测试）
+     */
+    public MasterServer(int port, String serverId, String zkConnect,
+                       long heartbeatTimeoutMs, long monitorCheckIntervalMs) {
         this.port = port;
         this.serverId = serverId;
 
@@ -65,7 +76,7 @@ public class MasterServer {
         this.metadataPersistence = new MetadataPersistence(zkClient);
 
         // 初始化集群管理器
-        this.clusterManager = new ClusterManager(HEARTBEAT_TIMEOUT_MS, HEARTBEAT_INTERVAL_MS);
+        this.clusterManager = new ClusterManager(heartbeatTimeoutMs, HEARTBEAT_INTERVAL_MS);
 
         // 初始化元数据管理器
         this.metadataManager = new MetadataManager();
@@ -74,7 +85,7 @@ public class MasterServer {
         this.failureRecoveryManager = new FailureRecoveryManager(clusterManager);
 
         // 初始化心跳监控器
-        this.heartbeatMonitor = new HeartbeatMonitor(clusterManager, MONITOR_CHECK_INTERVAL_MS);
+        this.heartbeatMonitor = new HeartbeatMonitor(clusterManager, monitorCheckIntervalMs);
         this.heartbeatMonitor.setFailureHandler(failureRecoveryManager);
 
         // 初始化迁移管理器

@@ -6,8 +6,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 public class FakeRegionServer {
 
@@ -24,11 +23,14 @@ public class FakeRegionServer {
     private ManagedChannel channel;
     private MasterServiceGrpc.MasterServiceBlockingStub stub;
     private FailureMode failureMode;
+    private ScheduledExecutorService heartbeatScheduler;
+    private volatile boolean autoHeartbeatEnabled;
 
     public FakeRegionServer(String serverId) {
         this.serverId = serverId;
         this.regions = new ConcurrentHashMap<>();
         this.failureMode = FailureMode.NONE;
+        this.autoHeartbeatEnabled = false;
     }
 
     public void start(int port) {
@@ -48,7 +50,42 @@ public class FakeRegionServer {
         return stub.registerRegionServer(request);
     }
 
+    /**
+     * Start automatic heartbeat sending (every 2 seconds)
+     */
+    public void startAutoHeartbeat() {
+        if (autoHeartbeatEnabled) {
+            return;
+        }
+        autoHeartbeatEnabled = true;
+        heartbeatScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread thread = new Thread(r, "FakeRS-" + serverId + "-Heartbeat");
+            thread.setDaemon(true);
+            return thread;
+        });
+        heartbeatScheduler.scheduleAtFixedRate(() -> {
+            try {
+                if (autoHeartbeatEnabled && failureMode != FailureMode.DISCONNECT) {
+                    heartbeat();
+                }
+            } catch (Exception e) {
+                // Ignore heartbeat errors
+            }
+        }, 0, 2, TimeUnit.SECONDS);
+    }
+
+    /**
+     * Stop automatic heartbeat sending
+     */
+    public void stopAutoHeartbeat() {
+        autoHeartbeatEnabled = false;
+        if (heartbeatScheduler != null) {
+            heartbeatScheduler.shutdown();
+        }
+    }
+
     public void stop() {
+        stopAutoHeartbeat();
         if (channel != null) {
             try {
                 channel.shutdown().awaitTermination(5, TimeUnit.SECONDS);
