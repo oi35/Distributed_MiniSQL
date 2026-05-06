@@ -47,10 +47,12 @@ public class SqlExecutor {
 
     private final MiniSQLClient client;
     private final TableSchemaCache schemas;
+    private final JoinExecutor joinExecutor;
 
     public SqlExecutor(MiniSQLClient client, TableSchemaCache schemas) {
         this.client = Objects.requireNonNull(client, "client");
         this.schemas = Objects.requireNonNull(schemas, "schemas");
+        this.joinExecutor = new JoinExecutor(client, schemas);
     }
 
     public SqlResult execute(String sql) {
@@ -134,9 +136,7 @@ public class SqlExecutor {
         }
         PlainSelect plain = (PlainSelect) body;
         if (plain.getJoins() != null && !plain.getJoins().isEmpty()) {
-            throw new MiniSQLClientException(
-                    "JOIN is not supported in v1+",
-                    ErrorCode.ERROR_UNIMPLEMENTED);
+            return joinExecutor.execute(plain);
         }
         String tableName = plain.getFromItem().toString();
         TableSchema schema = schemas.get(tableName);
