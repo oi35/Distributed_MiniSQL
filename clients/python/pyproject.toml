@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "minisql-client"
+version = "1.0.0"
+description = "Python client SDK for Distributed MiniSQL"
+requires-python = ">=3.8"
+dependencies = [
+    "grpcio>=1.58",
+    "protobuf>=4.24",
+]
+
+[project.optional-dependencies]
+dev = ["grpcio-tools>=1.58", "pytest>=7"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["minisql_client*"]
