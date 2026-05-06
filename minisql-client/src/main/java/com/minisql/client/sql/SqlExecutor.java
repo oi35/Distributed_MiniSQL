@@ -8,19 +8,9 @@ import com.minisql.common.proto.ColumnSchema;
 import com.minisql.common.proto.ErrorCode;
 import com.minisql.common.proto.TableSchema;
 import net.sf.jsqlparser.JSQLParserException;
-import net.sf.jsqlparser.expression.DoubleValue;
 import net.sf.jsqlparser.expression.Expression;
-import net.sf.jsqlparser.expression.LongValue;
-import net.sf.jsqlparser.expression.NullValue;
-import net.sf.jsqlparser.expression.SignedExpression;
-import net.sf.jsqlparser.expression.StringValue;
-import net.sf.jsqlparser.expression.operators.relational.Between;
 import net.sf.jsqlparser.expression.operators.relational.EqualsTo;
 import net.sf.jsqlparser.expression.operators.relational.ExpressionList;
-import net.sf.jsqlparser.expression.operators.relational.GreaterThan;
-import net.sf.jsqlparser.expression.operators.relational.GreaterThanEquals;
-import net.sf.jsqlparser.expression.operators.relational.MinorThan;
-import net.sf.jsqlparser.expression.operators.relational.MinorThanEquals;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.statement.Statement;
@@ -105,7 +95,7 @@ public class SqlExecutor {
         for (int i = 0; i < columns.size(); i++) {
             String colName = columns.get(i).getColumnName();
             ColumnSchema colSchema = ValueCodec.findColumn(schema, colName);
-            Object literal = literalValue(values.get(i));
+            Object literal = PredicateBuilder.literalValue(values.get(i));
             encoded.put(colSchema.getName(), ValueCodec.encode(colSchema, literal));
             if (colSchema.getName().equalsIgnoreCase(schema.getPrimaryKey())) {
                 pkValue = literal;
@@ -143,26 +133,25 @@ public class SqlExecutor {
         List<String> projectedColumns = extractProjection(plain, schema);
 
         Expression where = plain.getWhere();
-        ColumnSchema pk = ValueCodec.primaryKeyColumn(schema);
+        Predicate predicate = PredicateBuilder.build(where, schema);
 
-        if (where instanceof EqualsTo) {
-            EqualsTo eq = (EqualsTo) where;
-            requirePkColumn(eq.getLeftExpression(), pk);
-            ByteString key = ValueCodec.encode(pk, literalValue(eq.getRightExpression()));
-            MiniSQLClient.GetResult got = client.get(tableName, key, projectedColumns);
-            if (!got.isFound()) {
-                return SqlResult.rows(projectedColumns, Collections.emptyList());
-            }
-            return SqlResult.rows(projectedColumns,
-                    List.of(decodeRow(schema, got.getColumns(), projectedColumns)));
+        if (where != null && isSimplePkEquals(where, schema)) {
+            return executePointSelect(tableName, schema, (EqualsTo) where, projectedColumns);
         }
 
-        RangeBounds range = extractRange(where, pk, schema);
+        PkRangeExtractor.Range range = PkRangeExtractor.extract(predicate, schema);
+        // Scan the whole schema's columns so the predicate can evaluate on any column.
+        List<String> scanColumns = allColumnNames(schema);
         List<MiniSQLClient.ScanRow> scanned = client.scan(
-                tableName, range.start, range.end, 0, projectedColumns);
+                tableName, range.start, range.end, 0, scanColumns);
+
         List<Map<String, Object>> rows = new ArrayList<>(scanned.size());
         for (MiniSQLClient.ScanRow row : scanned) {
-            rows.add(decodeRow(schema, row.getColumns(), projectedColumns));
+            DecodedRow decoded = decodeRow(schema, row);
+            if (!predicate.test(decoded)) {
+                continue;
+            }
+            rows.add(projectRow(decoded, projectedColumns));
         }
         return SqlResult.rows(projectedColumns, rows);
     }
@@ -170,23 +159,82 @@ public class SqlExecutor {
     private SqlResult executeDelete(Delete delete) {
         String tableName = delete.getTable().getName();
         TableSchema schema = schemas.get(tableName);
-        ColumnSchema pk = ValueCodec.primaryKeyColumn(schema);
         Expression where = delete.getWhere();
-        if (!(where instanceof EqualsTo)) {
+
+        if (where != null && isSimplePkEquals(where, schema)) {
+            EqualsTo eq = (EqualsTo) where;
+            ColumnSchema pk = ValueCodec.primaryKeyColumn(schema);
+            ByteString key = ValueCodec.encode(pk, PredicateBuilder.literalValue(eq.getRightExpression()));
+            MiniSQLClient.DeleteResult result = client.delete(tableName, key);
+            if (!result.isSuccess()) {
+                throw new MiniSQLClientException(
+                        "DELETE failed: " + result.getErrorMessage(),
+                        result.getErrorCode());
+            }
+            return SqlResult.updateCount(result.didExist() ? 1 : 0);
+        }
+
+        if (where == null) {
             throw new MiniSQLClientException(
-                    "DELETE only supports WHERE primary_key = value",
-                    ErrorCode.ERROR_UNIMPLEMENTED);
+                    "DELETE without WHERE is not allowed",
+                    ErrorCode.ERROR_INVALID_ARGUMENT);
+        }
+
+        Predicate predicate = PredicateBuilder.build(where, schema);
+        PkRangeExtractor.Range range = PkRangeExtractor.extract(predicate, schema);
+        List<String> scanColumns = allColumnNames(schema);
+        List<MiniSQLClient.ScanRow> scanned = client.scan(
+                tableName, range.start, range.end, 0, scanColumns);
+
+        int deleted = 0;
+        for (MiniSQLClient.ScanRow row : scanned) {
+            DecodedRow decoded = decodeRow(schema, row);
+            if (!predicate.test(decoded)) {
+                continue;
+            }
+            MiniSQLClient.DeleteResult result = client.delete(tableName, row.getKey());
+            if (!result.isSuccess()) {
+                throw new MiniSQLClientException(
+                        "DELETE failed mid-scan: " + result.getErrorMessage(),
+                        result.getErrorCode());
+            }
+            if (result.didExist()) {
+                deleted++;
+            }
+        }
+        LOG.debug("DELETE from {} affected {} rows", tableName, deleted);
+        return SqlResult.updateCount(deleted);
+    }
+
+    private SqlResult executePointSelect(String tableName, TableSchema schema,
+                                         EqualsTo eq, List<String> projectedColumns) {
+        ColumnSchema pk = ValueCodec.primaryKeyColumn(schema);
+        ByteString key = ValueCodec.encode(pk,
+                PredicateBuilder.literalValue(eq.getRightExpression()));
+        MiniSQLClient.GetResult got = client.get(tableName, key, projectedColumns);
+        if (!got.isFound()) {
+            return SqlResult.rows(projectedColumns, Collections.emptyList());
+        }
+        Map<String, Object> projected = new LinkedHashMap<>();
+        for (String colName : projectedColumns) {
+            ColumnSchema colSchema = ValueCodec.findColumn(schema, colName);
+            ByteString raw = got.getColumns().get(colSchema.getName());
+            projected.put(colSchema.getName(),
+                    raw == null ? null : ValueCodec.decode(colSchema, raw));
+        }
+        return SqlResult.rows(projectedColumns, List.of(projected));
+    }
+
+    private static boolean isSimplePkEquals(Expression where, TableSchema schema) {
+        if (!(where instanceof EqualsTo)) {
+            return false;
         }
         EqualsTo eq = (EqualsTo) where;
-        requirePkColumn(eq.getLeftExpression(), pk);
-        ByteString key = ValueCodec.encode(pk, literalValue(eq.getRightExpression()));
-        MiniSQLClient.DeleteResult result = client.delete(tableName, key);
-        if (!result.isSuccess()) {
-            throw new MiniSQLClientException(
-                    "DELETE failed: " + result.getErrorMessage(),
-                    result.getErrorCode());
+        if (!(eq.getLeftExpression() instanceof Column)) {
+            return false;
         }
-        return SqlResult.updateCount(result.didExist() ? 1 : 0);
+        String col = ((Column) eq.getLeftExpression()).getColumnName();
+        return col.equalsIgnoreCase(schema.getPrimaryKey());
     }
 
     private static List<String> extractProjection(PlainSelect plain, TableSchema schema) {
@@ -215,127 +263,30 @@ public class SqlExecutor {
         return cols;
     }
 
-    private RangeBounds extractRange(Expression where, ColumnSchema pk, TableSchema schema) {
-        if (where == null) {
-            return RangeBounds.full();
+    private static List<String> allColumnNames(TableSchema schema) {
+        List<String> cols = new ArrayList<>(schema.getColumnsCount());
+        for (ColumnSchema col : schema.getColumnsList()) {
+            cols.add(col.getName());
         }
-        if (where instanceof Between) {
-            Between between = (Between) where;
-            requirePkColumn(between.getLeftExpression(), pk);
-            ByteString start = ValueCodec.encode(pk, literalValue(between.getBetweenExpressionStart()));
-            ByteString endInclusive = ValueCodec.encode(pk, literalValue(between.getBetweenExpressionEnd()));
-            return new RangeBounds(start, keyNextOf(endInclusive));
-        }
-        if (where instanceof GreaterThanEquals) {
-            GreaterThanEquals gte = (GreaterThanEquals) where;
-            requirePkColumn(gte.getLeftExpression(), pk);
-            return new RangeBounds(
-                    ValueCodec.encode(pk, literalValue(gte.getRightExpression())),
-                    ByteString.EMPTY);
-        }
-        if (where instanceof GreaterThan) {
-            GreaterThan gt = (GreaterThan) where;
-            requirePkColumn(gt.getLeftExpression(), pk);
-            return new RangeBounds(
-                    keyNextOf(ValueCodec.encode(pk, literalValue(gt.getRightExpression()))),
-                    ByteString.EMPTY);
-        }
-        if (where instanceof MinorThan) {
-            MinorThan lt = (MinorThan) where;
-            requirePkColumn(lt.getLeftExpression(), pk);
-            return new RangeBounds(
-                    ByteString.EMPTY,
-                    ValueCodec.encode(pk, literalValue(lt.getRightExpression())));
-        }
-        if (where instanceof MinorThanEquals) {
-            MinorThanEquals lte = (MinorThanEquals) where;
-            requirePkColumn(lte.getLeftExpression(), pk);
-            return new RangeBounds(
-                    ByteString.EMPTY,
-                    keyNextOf(ValueCodec.encode(pk, literalValue(lte.getRightExpression()))));
-        }
-        throw new MiniSQLClientException(
-                "unsupported WHERE clause: " + where,
-                ErrorCode.ERROR_UNIMPLEMENTED);
+        return cols;
     }
 
-    private static void requirePkColumn(Expression expr, ColumnSchema pk) {
-        if (!(expr instanceof Column)) {
-            throw new MiniSQLClientException(
-                    "WHERE left side must be a column",
-                    ErrorCode.ERROR_INVALID_ARGUMENT);
-        }
-        String name = ((Column) expr).getColumnName();
-        if (!name.equalsIgnoreCase(pk.getName())) {
-            throw new MiniSQLClientException(
-                    "WHERE clause must filter on primary key " + pk.getName()
-                            + ", got " + name,
-                    ErrorCode.ERROR_UNIMPLEMENTED);
-        }
-    }
-
-    private static Object literalValue(Expression expr) {
-        if (expr instanceof LongValue) {
-            return ((LongValue) expr).getValue();
-        }
-        if (expr instanceof DoubleValue) {
-            return ((DoubleValue) expr).getValue();
-        }
-        if (expr instanceof StringValue) {
-            return ((StringValue) expr).getValue();
-        }
-        if (expr instanceof NullValue) {
-            return null;
-        }
-        if (expr instanceof SignedExpression) {
-            SignedExpression signed = (SignedExpression) expr;
-            Object inner = literalValue(signed.getExpression());
-            if (signed.getSign() == '-') {
-                if (inner instanceof Long) {
-                    return -((Long) inner);
-                }
-                if (inner instanceof Double) {
-                    return -((Double) inner);
-                }
-            }
-            return inner;
-        }
-        throw new MiniSQLClientException(
-                "unsupported literal expression: " + expr,
-                ErrorCode.ERROR_UNIMPLEMENTED);
-    }
-
-    private static ByteString keyNextOf(ByteString key) {
-        byte[] arr = key.toByteArray();
-        byte[] next = new byte[arr.length + 1];
-        System.arraycopy(arr, 0, next, 0, arr.length);
-        next[arr.length] = 0;
-        return ByteString.copyFrom(next);
-    }
-
-    private static Map<String, Object> decodeRow(TableSchema schema,
-                                                 Map<String, ByteString> raw,
-                                                 List<String> projection) {
+    private static DecodedRow decodeRow(TableSchema schema, MiniSQLClient.ScanRow row) {
+        Map<String, ByteString> raw = row.getColumns();
         Map<String, Object> decoded = new LinkedHashMap<>();
-        for (String col : projection) {
-            ColumnSchema colSchema = ValueCodec.findColumn(schema, col);
-            ByteString bytes = raw.get(colSchema.getName());
-            decoded.put(colSchema.getName(), bytes == null ? null : ValueCodec.decode(colSchema, bytes));
+        for (ColumnSchema col : schema.getColumnsList()) {
+            ByteString value = raw.get(col.getName());
+            decoded.put(col.getName(),
+                    value == null ? null : ValueCodec.decode(col, value));
         }
-        return decoded;
+        return new DecodedRow(schema, row.getKey(), raw, decoded);
     }
 
-    private static final class RangeBounds {
-        final ByteString start;
-        final ByteString end;
-
-        RangeBounds(ByteString start, ByteString end) {
-            this.start = start;
-            this.end = end;
+    private static Map<String, Object> projectRow(DecodedRow row, List<String> projection) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        for (String col : projection) {
+            out.put(col, row.get(col));
         }
-
-        static RangeBounds full() {
-            return new RangeBounds(ByteString.EMPTY, ByteString.EMPTY);
-        }
+        return out;
     }
 }
