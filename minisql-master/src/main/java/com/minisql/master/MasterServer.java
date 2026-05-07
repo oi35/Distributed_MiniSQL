@@ -116,7 +116,8 @@ public class MasterServer {
         // 构建gRPC服务器
         this.server = ServerBuilder.forPort(port)
                 .addService(new MasterServiceImpl(clusterManager))
-                .addService(new ClientMasterServiceImpl(metadataManager))
+                .addService(new ClientMasterServiceImpl(metadataManager, clusterManager))
+                .addService(new AdminServiceImpl(clusterManager, migrationManager))
                 .build();
     }
 
