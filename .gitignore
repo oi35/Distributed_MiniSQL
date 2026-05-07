@@ -13,3 +13,7 @@ target/
 # Work summaries and status documents
 INTEGRATION-TEST-*.md
 WORK-SUMMARY-*.md
+
+# Log files
+logs/
+*.log
