@@ -1,12 +1,26 @@
 package com.minisql.regionserver;
 
+import com.minisql.common.proto.RegionInfo;
+import com.minisql.common.proto.ServerMetrics;
+import com.minisql.master.proto.HeartbeatRequest;
+import com.minisql.master.proto.HeartbeatResponse;
+import com.minisql.master.proto.MasterServiceGrpc;
+import com.minisql.master.proto.RegionCommand;
+import com.minisql.master.proto.RegisterRegionServerRequest;
+import com.minisql.master.proto.RegisterRegionServerResponse;
+import com.minisql.master.proto.UnregisterRegionServerRequest;
 import com.minisql.regionserver.service.RegionServerServiceImpl;
+import com.minisql.regionserver.store.RegionDataStore;
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
+import io.grpc.StatusRuntimeException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -14,6 +28,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * RegionServer main entry with gRPC server and a small CLI for local testing.
@@ -25,12 +42,30 @@ public class RegionServerMain {
 
     private final String regionServerId;
     private final int port;
+    private final String host;
+    private final String masterHost;
+    private final int masterPort;
+    private final boolean masterRegistrationEnabled;
     private final RegionServerServiceImpl service;
     private Server grpcServer;
+    private ManagedChannel masterChannel;
+    private MasterServiceGrpc.MasterServiceBlockingStub masterStub;
+    private ScheduledExecutorService heartbeatExecutor;
+    private volatile boolean registered;
+    private volatile String assignedServerId;
+    private volatile int heartbeatIntervalMs;
 
     public RegionServerMain(String regionServerId, int port, Properties properties) {
         this.regionServerId = regionServerId;
+        this.assignedServerId = regionServerId;
         this.port = port;
+        this.host = properties.getProperty("regionserver.host", "localhost");
+        this.masterHost = properties.getProperty("master.host", "localhost");
+        this.masterPort = parsePort(properties.getProperty("master.port"), 8000);
+        this.masterRegistrationEnabled = Boolean.parseBoolean(
+                properties.getProperty("master.registration.enabled", "true"));
+        this.heartbeatIntervalMs = parsePort(
+                properties.getProperty("master.heartbeat.interval.ms"), 3000);
         this.service = new RegionServerServiceImpl(regionServerId, properties);
         logger.info("RegionServer {} initialized on port {}", regionServerId, port);
     }
@@ -42,6 +77,7 @@ public class RegionServerMain {
                 .start();
 
         Runtime.getRuntime().addShutdownHook(new Thread(this::stop));
+        connectToMaster();
 
         logger.info("RegionServer {} started on port {}", regionServerId, port);
         System.out.println("=====================================");
@@ -58,10 +94,21 @@ public class RegionServerMain {
     }
 
     public void stop() {
+        stopHeartbeat();
+        unregisterFromMaster();
         if (grpcServer != null) {
             grpcServer.shutdown();
         }
+        if (masterChannel != null) {
+            masterChannel.shutdown();
+        }
         logger.info("RegionServer {} stopped", regionServerId);
+    }
+
+    public void blockUntilShutdown() throws InterruptedException {
+        if (grpcServer != null) {
+            grpcServer.awaitTermination();
+        }
     }
 
     public void runCommandLine() {
@@ -110,6 +157,12 @@ public class RegionServerMain {
                 break;
             case "list":
                 handleList(parts);
+                break;
+            case "open":
+                handleOpen(parts);
+                break;
+            case "close":
+                handleClose(parts);
                 break;
             default:
                 System.out.println("Unknown command: " + cmd);
@@ -176,11 +229,165 @@ public class RegionServerMain {
     }
 
     private void handleList(String[] parts) {
-        if (parts.length != 2) {
-            System.out.println("Usage: list <table>");
+        if (parts.length < 2 || parts.length > 3) {
+            System.out.println("Usage: list <table> [limit]");
             return;
         }
-        System.out.println("List command is reserved for a future scan/list implementation");
+        int limit = parts.length == 3 ? parsePort(parts[2], 20) : 20;
+        for (RegionDataStore.StoredRowRecord row : service.listRows("region-001", limit)) {
+            System.out.print(new String(row.getKey(), StandardCharsets.UTF_8));
+            for (Map.Entry<String, com.google.protobuf.ByteString> entry : row.getColumns().entrySet()) {
+                System.out.print(" " + entry.getKey() + "=" + entry.getValue().toStringUtf8());
+            }
+            System.out.println();
+        }
+    }
+
+    private void handleOpen(String[] parts) {
+        if (parts.length != 3) {
+            System.out.println("Usage: open <table> <region>");
+            return;
+        }
+        service.openRegion(RegionInfo.newBuilder()
+                .setTableName(parts[1])
+                .setRegionId(parts[2])
+                .setPrimaryServer(assignedServerId)
+                .build());
+        System.out.println("Region opened: " + parts[2]);
+    }
+
+    private void handleClose(String[] parts) {
+        if (parts.length != 2) {
+            System.out.println("Usage: close <region>");
+            return;
+        }
+        System.out.println(service.closeRegion(parts[1]) ? "Region closed" : "Region not found");
+    }
+
+    private void connectToMaster() {
+        if (!masterRegistrationEnabled) {
+            logger.info("Master registration disabled");
+            return;
+        }
+
+        masterChannel = ManagedChannelBuilder.forAddress(masterHost, masterPort)
+                .usePlaintext()
+                .build();
+        masterStub = MasterServiceGrpc.newBlockingStub(masterChannel);
+
+        try {
+            RegisterRegionServerResponse response = masterStub.registerRegionServer(
+                    RegisterRegionServerRequest.newBuilder()
+                            .setServerId(regionServerId)
+                            .setHost(host)
+                            .setPort(port)
+                            .setTotalMemoryMb(Runtime.getRuntime().maxMemory() / 1024 / 1024)
+                            .setCpuCores(Runtime.getRuntime().availableProcessors())
+                            .setDiskCapacityMb(new File(".").getTotalSpace() / 1024 / 1024)
+                            .build());
+            if (!response.getSuccess()) {
+                logger.warn("RegionServer registration rejected: {}", response.getErrorMessage());
+                return;
+            }
+            registered = true;
+            assignedServerId = response.getAssignedServerId().isEmpty()
+                    ? regionServerId
+                    : response.getAssignedServerId();
+            if (response.getHeartbeatIntervalMs() > 0) {
+                heartbeatIntervalMs = response.getHeartbeatIntervalMs();
+            }
+            startHeartbeat();
+            logger.info("Registered RegionServer {} with Master {}:{}", assignedServerId, masterHost, masterPort);
+        } catch (StatusRuntimeException e) {
+            logger.warn("Master {}:{} unavailable, RegionServer will run locally: {}",
+                    masterHost, masterPort, e.getStatus());
+        }
+    }
+
+    private void startHeartbeat() {
+        heartbeatExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread thread = new Thread(r, "regionserver-heartbeat");
+            thread.setDaemon(true);
+            return thread;
+        });
+        heartbeatExecutor.scheduleAtFixedRate(this::sendHeartbeatSafely,
+                0, heartbeatIntervalMs, TimeUnit.MILLISECONDS);
+    }
+
+    private void stopHeartbeat() {
+        if (heartbeatExecutor != null) {
+            heartbeatExecutor.shutdownNow();
+        }
+    }
+
+    private void sendHeartbeatSafely() {
+        if (!registered || masterStub == null) {
+            return;
+        }
+        try {
+            HeartbeatResponse response = masterStub.sendHeartbeat(HeartbeatRequest.newBuilder()
+                    .setServerId(assignedServerId)
+                    .setTimestamp(System.currentTimeMillis())
+                    .addAllRegionIds(service.getActiveRegionIds())
+                    .setMetrics(ServerMetrics.newBuilder()
+                            .setRegionCount(service.getActiveRegionIds().size())
+                            .setTotalSizeBytes(service.getTotalSizeBytes())
+                            .setMemoryUsage(calculateMemoryUsage())
+                            .setDiskUsedBytes(new File(".").getTotalSpace() - new File(".").getFreeSpace())
+                            .setDiskTotalBytes(new File(".").getTotalSpace())
+                            .build())
+                    .build());
+            if (response.getAcknowledged()) {
+                for (RegionCommand command : response.getCommandsList()) {
+                    handleRegionCommand(command);
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Heartbeat to Master failed: {}", e.getMessage());
+        }
+    }
+
+    private void handleRegionCommand(RegionCommand command) {
+        switch (command.getType()) {
+            case OPEN_REGION:
+                service.openRegion(command.getRegionInfo());
+                break;
+            case CLOSE_REGION:
+                service.closeRegion(command.getRegionId());
+                break;
+            case MIGRATE_REGION:
+                service.migrateRegion(command.getRegionId(), command.getTargetServer(), "");
+                break;
+            default:
+                logger.warn("Unsupported region command: {}", command.getType());
+                break;
+        }
+    }
+
+    private void unregisterFromMaster() {
+        if (!registered || masterStub == null) {
+            return;
+        }
+        try {
+            masterStub.unregisterRegionServer(UnregisterRegionServerRequest.newBuilder()
+                    .setServerId(assignedServerId)
+                    .setReason("SHUTDOWN")
+                    .build());
+        } catch (Exception e) {
+            logger.warn("Failed to unregister RegionServer from Master: {}", e.getMessage());
+        } finally {
+            registered = false;
+        }
+    }
+
+    private double calculateMemoryUsage() {
+        Runtime runtime = Runtime.getRuntime();
+        long max = runtime.maxMemory();
+        if (max <= 0) {
+            return 0D;
+        }
+        long used = runtime.totalMemory() - runtime.freeMemory();
+        return used * 100D / max;
     }
 
     public static void main(String[] args) {
@@ -208,7 +415,12 @@ public class RegionServerMain {
         RegionServerMain regionServer = new RegionServerMain(regionServerId, port, properties);
         try {
             regionServer.start();
-            regionServer.runCommandLine();
+            if (Boolean.parseBoolean(properties.getProperty("regionserver.cli.enabled", "false"))
+                    || System.console() != null) {
+                regionServer.runCommandLine();
+            } else {
+                regionServer.blockUntilShutdown();
+            }
         } catch (Exception e) {
             logger.error("RegionServer {} failed", regionServerId, e);
             System.exit(1);
