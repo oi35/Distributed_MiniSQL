@@ -21,9 +21,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -203,6 +205,59 @@ public class RegionServerServiceImpl extends RegionServerServiceGrpc.RegionServe
             logger.error("Local EXISTS failed", e);
             return false;
         }
+    }
+
+    public Set<String> getActiveRegionIds() {
+        return Collections.unmodifiableSet(activeRegions.keySet());
+    }
+
+    public long getTotalSizeBytes() {
+        long total = 0L;
+        for (RegionDataStore store : regionStores.values()) {
+            total += store.sizeBytes();
+        }
+        return total;
+    }
+
+    public boolean openRegion(RegionInfo region) {
+        createRegionTable(region);
+        activeRegions.put(region.getRegionId(), region);
+        RegionDataStore store = regionStores.computeIfAbsent(region.getRegionId(), k -> new InMemoryRegionDataStore());
+        replicationLogService.registerRegionStore(region.getRegionId(), store);
+        if (region.getReplicaServersCount() > 0) {
+            String primaryAddr = region.getPrimaryServer();
+            if (primaryAddr == null || primaryAddr.isEmpty()) {
+                primaryAddr = regionServerId;
+            }
+            replicationManager.setReplicasFromRegionInfo(
+                    region.getRegionId(), primaryAddr, region.getReplicaServersList());
+        }
+        return true;
+    }
+
+    public boolean closeRegion(String regionId) {
+        RegionInfo removed = activeRegions.remove(regionId);
+        if (removed != null) {
+            replicationLogService.unregisterRegionStore(regionId);
+            regionStores.remove(regionId);
+        }
+        return removed != null;
+    }
+
+    public boolean migrateRegion(String regionId, String targetServer, String migrationId) {
+        return activeRegions.containsKey(regionId);
+    }
+
+    public List<RegionDataStore.StoredRowRecord> listRows(String regionId, int limit) {
+        RegionDataStore store = regionStores.get(regionId);
+        if (store == null) {
+            return Collections.emptyList();
+        }
+        List<RegionDataStore.StoredRowRecord> rows = store.scan(null, null, false);
+        if (limit > 0 && rows.size() > limit) {
+            return new ArrayList<>(rows.subList(0, limit));
+        }
+        return rows;
     }
 
     private Map<String, byte[]> toByteArrayMap(Map<String, ByteString> columns) {
