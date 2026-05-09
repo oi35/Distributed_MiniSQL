@@ -14,7 +14,8 @@
 - **Master ↔ RegionServer**: 7个显式方法 + 1个泛型方法
 - **Master ↔ Client**: 11个显式方法
 - **RegionServer ↔ Client**: 11个显式方法 + 1个泛型方法 + 3个管理方法
-- **总计**: 34个方法
+- **Admin → Master** (CLI管理工具): 2个显式方法
+- **总计**: 36个方法
 
 ---
 
@@ -123,6 +124,17 @@
 |------|------|------|
 | `GetReplicationLog` | 获取WAL日志 | 流式返回 |
 | `ApplyReplicationLog` | 应用WAL日志 | 批量应用 |
+
+---
+
+### 2.4 Admin → Master 接口（CLI管理工具）
+
+**服务**: `AdminService`
+
+| 方法 | 用途 | 调用方 |
+|------|------|--------|
+| `ListServers` | 获取所有RegionServer列表 | CLI工具 |
+| `TriggerBalance` | 触发手动负载均衡 | CLI工具 |
 
 ---
 

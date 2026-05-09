@@ -438,3 +438,48 @@ message GetClusterStatsResponse {
   int32 regions_migrating = 7;
   int64 total_qps = 8;
 }
+
+// ========================================
+// Admin 服务接口 (for CLI admin tool)
+// ========================================
+
+service AdminService {
+  // 获取所有RegionServer列表
+  rpc ListServers(ListServersRequest) returns (ListServersResponse);
+
+  // 触发手动负载均衡
+  rpc TriggerBalance(TriggerBalanceRequest) returns (TriggerBalanceResponse);
+}
+
+message ListServersRequest {
+  // 空请求
+}
+
+message ServerDetail {
+  string server_id = 1;
+  string host = 2;
+  int32 port = 3;
+  minisql.common.ServerState state = 4;
+  double load_score = 5;
+  int32 region_count = 6;
+  int64 total_size_bytes = 7;
+  int64 last_heartbeat_time = 8;
+  int64 uptime_ms = 9;
+  string address = 10;
+}
+
+message ListServersResponse {
+  repeated ServerDetail servers = 1;
+  int32 total_count = 2;
+  int32 online_count = 3;
+}
+
+message TriggerBalanceRequest {
+  // 空请求
+}
+
+message TriggerBalanceResponse {
+  bool success = 1;
+  string message = 2;
+  int32 plans_generated = 3;
+}

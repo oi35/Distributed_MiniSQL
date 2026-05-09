@@ -229,6 +229,31 @@ public final class MasterProto {
   static final 
     com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
       internal_static_minisql_master_GetClusterStatsResponse_fieldAccessorTable;
+  static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_minisql_master_ListServersRequest_descriptor;
+  static final 
+    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      internal_static_minisql_master_ListServersRequest_fieldAccessorTable;
+  static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_minisql_master_ServerDetail_descriptor;
+  static final 
+    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      internal_static_minisql_master_ServerDetail_fieldAccessorTable;
+  static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_minisql_master_ListServersResponse_descriptor;
+  static final 
+    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      internal_static_minisql_master_ListServersResponse_fieldAccessorTable;
+  static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_minisql_master_TriggerBalanceRequest_descriptor;
+  static final 
+    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      internal_static_minisql_master_TriggerBalanceRequest_fieldAccessorTable;
+  static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_minisql_master_TriggerBalanceResponse_descriptor;
+  static final 
+    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      internal_static_minisql_master_TriggerBalanceResponse_fieldAccessorTable;
 
   public static com.google.protobuf.Descriptors.FileDescriptor
       getDescriptor() {
@@ -371,57 +396,74 @@ public final class MasterProto {
       "l_row_count\030\004 \001(\003\022\036\n\026average_region_size" +
       "_mb\030\005 \001(\001\022\031\n\021regions_splitting\030\006 \001(\005\022\031\n\021" +
       "regions_migrating\030\007 \001(\005\022\021\n\ttotal_qps\030\010 \001" +
-      "(\0032\342\007\n\rMasterService\022q\n\024RegisterRegionSe" +
-      "rver\022+.minisql.master.RegisterRegionServ" +
-      "erRequest\032,.minisql.master.RegisterRegio" +
-      "nServerResponse\022T\n\rSendHeartbeat\022 .minis" +
-      "ql.master.HeartbeatRequest\032!.minisql.mas" +
-      "ter.HeartbeatResponse\022w\n\026UnregisterRegio" +
-      "nServer\022-.minisql.master.UnregisterRegio" +
-      "nServerRequest\032..minisql.master.Unregist" +
-      "erRegionServerResponse\022k\n\022ReportRegionOn" +
-      "line\022).minisql.master.ReportRegionOnline" +
-      "Request\032*.minisql.master.ReportRegionOnl" +
-      "ineResponse\022k\n\022ReportRegionClosed\022).mini" +
-      "sql.master.ReportRegionClosedRequest\032*.m" +
-      "inisql.master.ReportRegionClosedResponse" +
-      "\022h\n\021ReportRegionSplit\022(.minisql.master.R" +
-      "eportRegionSplitRequest\032).minisql.master" +
-      ".ReportRegionSplitResponse\022z\n\027ReportMigr" +
-      "ationProgress\022..minisql.master.ReportMig" +
-      "rationProgressRequest\032/.minisql.master.R" +
-      "eportMigrationProgressResponse\022n\n\023Report" +
-      "RegionFailure\022*.minisql.master.ReportReg" +
-      "ionFailureRequest\032+.minisql.master.Repor" +
-      "tRegionFailureResponse\022_\n\016AdminOperation" +
-      "\022%.minisql.master.AdminOperationRequest\032" +
-      "&.minisql.master.AdminOperationResponse2" +
-      "\320\007\n\023ClientMasterService\022V\n\013CreateTable\022\"" +
-      ".minisql.master.CreateTableRequest\032#.min" +
-      "isql.master.CreateTableResponse\022P\n\tDropT" +
-      "able\022 .minisql.master.DropTableRequest\032!" +
-      ".minisql.master.DropTableResponse\022_\n\016Get" +
-      "TableSchema\022%.minisql.master.GetTableSch" +
-      "emaRequest\032&.minisql.master.GetTableSche" +
-      "maResponse\022S\n\nListTables\022!.minisql.maste" +
-      "r.ListTablesRequest\032\".minisql.master.Lis" +
-      "tTablesResponse\022\\\n\rGetRouteTable\022$.minis" +
-      "ql.master.GetRouteTableRequest\032%.minisql" +
-      ".master.GetRouteTableResponse\022_\n\016GetRout" +
-      "eForKey\022%.minisql.master.GetRouteForKeyR" +
-      "equest\032&.minisql.master.GetRouteForKeyRe" +
-      "sponse\022h\n\021GetRoutesForRange\022(.minisql.ma" +
-      "ster.GetRoutesForRangeRequest\032).minisql." +
-      "master.GetRoutesForRangeResponse\022e\n\020Repo" +
-      "rtStaleRoute\022\'.minisql.master.ReportStal" +
-      "eRouteRequest\032(.minisql.master.ReportSta" +
-      "leRouteResponse\022e\n\020GetClusterHealth\022\'.mi" +
-      "nisql.master.GetClusterHealthRequest\032(.m" +
-      "inisql.master.GetClusterHealthResponse\022b" +
-      "\n\017GetClusterStats\022&.minisql.master.GetCl" +
-      "usterStatsRequest\032\'.minisql.master.GetCl" +
-      "usterStatsResponseB)\n\030com.minisql.master" +
-      ".protoB\013MasterProtoP\001b\006proto3"
+      "(\003\"\024\n\022ListServersRequest\"\356\001\n\014ServerDetai" +
+      "l\022\021\n\tserver_id\030\001 \001(\t\022\014\n\004host\030\002 \001(\t\022\014\n\004po" +
+      "rt\030\003 \001(\005\022*\n\005state\030\004 \001(\0162\033.minisql.common" +
+      ".ServerState\022\022\n\nload_score\030\005 \001(\001\022\024\n\014regi" +
+      "on_count\030\006 \001(\005\022\030\n\020total_size_bytes\030\007 \001(\003" +
+      "\022\033\n\023last_heartbeat_time\030\010 \001(\003\022\021\n\tuptime_" +
+      "ms\030\t \001(\003\022\017\n\007address\030\n \001(\t\"o\n\023ListServers" +
+      "Response\022-\n\007servers\030\001 \003(\0132\034.minisql.mast" +
+      "er.ServerDetail\022\023\n\013total_count\030\002 \001(\005\022\024\n\014" +
+      "online_count\030\003 \001(\005\"\027\n\025TriggerBalanceRequ" +
+      "est\"S\n\026TriggerBalanceResponse\022\017\n\007success" +
+      "\030\001 \001(\010\022\017\n\007message\030\002 \001(\t\022\027\n\017plans_generat" +
+      "ed\030\003 \001(\0052\342\007\n\rMasterService\022q\n\024RegisterRe" +
+      "gionServer\022+.minisql.master.RegisterRegi" +
+      "onServerRequest\032,.minisql.master.Registe" +
+      "rRegionServerResponse\022T\n\rSendHeartbeat\022 " +
+      ".minisql.master.HeartbeatRequest\032!.minis" +
+      "ql.master.HeartbeatResponse\022w\n\026Unregiste" +
+      "rRegionServer\022-.minisql.master.Unregiste" +
+      "rRegionServerRequest\032..minisql.master.Un" +
+      "registerRegionServerResponse\022k\n\022ReportRe" +
+      "gionOnline\022).minisql.master.ReportRegion" +
+      "OnlineRequest\032*.minisql.master.ReportReg" +
+      "ionOnlineResponse\022k\n\022ReportRegionClosed\022" +
+      ").minisql.master.ReportRegionClosedReque" +
+      "st\032*.minisql.master.ReportRegionClosedRe" +
+      "sponse\022h\n\021ReportRegionSplit\022(.minisql.ma" +
+      "ster.ReportRegionSplitRequest\032).minisql." +
+      "master.ReportRegionSplitResponse\022z\n\027Repo" +
+      "rtMigrationProgress\022..minisql.master.Rep" +
+      "ortMigrationProgressRequest\032/.minisql.ma" +
+      "ster.ReportMigrationProgressResponse\022n\n\023" +
+      "ReportRegionFailure\022*.minisql.master.Rep" +
+      "ortRegionFailureRequest\032+.minisql.master" +
+      ".ReportRegionFailureResponse\022_\n\016AdminOpe" +
+      "ration\022%.minisql.master.AdminOperationRe" +
+      "quest\032&.minisql.master.AdminOperationRes" +
+      "ponse2\320\007\n\023ClientMasterService\022V\n\013CreateT" +
+      "able\022\".minisql.master.CreateTableRequest" +
+      "\032#.minisql.master.CreateTableResponse\022P\n" +
+      "\tDropTable\022 .minisql.master.DropTableReq" +
+      "uest\032!.minisql.master.DropTableResponse\022" +
+      "_\n\016GetTableSchema\022%.minisql.master.GetTa" +
+      "bleSchemaRequest\032&.minisql.master.GetTab" +
+      "leSchemaResponse\022S\n\nListTables\022!.minisql" +
+      ".master.ListTablesRequest\032\".minisql.mast" +
+      "er.ListTablesResponse\022\\\n\rGetRouteTable\022$" +
+      ".minisql.master.GetRouteTableRequest\032%.m" +
+      "inisql.master.GetRouteTableResponse\022_\n\016G" +
+      "etRouteForKey\022%.minisql.master.GetRouteF" +
+      "orKeyRequest\032&.minisql.master.GetRouteFo" +
+      "rKeyResponse\022h\n\021GetRoutesForRange\022(.mini" +
+      "sql.master.GetRoutesForRangeRequest\032).mi" +
+      "nisql.master.GetRoutesForRangeResponse\022e" +
+      "\n\020ReportStaleRoute\022\'.minisql.master.Repo" +
+      "rtStaleRouteRequest\032(.minisql.master.Rep" +
+      "ortStaleRouteResponse\022e\n\020GetClusterHealt" +
+      "h\022\'.minisql.master.GetClusterHealthReque" +
+      "st\032(.minisql.master.GetClusterHealthResp" +
+      "onse\022b\n\017GetClusterStats\022&.minisql.master" +
+      ".GetClusterStatsRequest\032\'.minisql.master" +
+      ".GetClusterStatsResponse2\307\001\n\014AdminServic" +
+      "e\022V\n\013ListServers\022\".minisql.master.ListSe" +
+      "rversRequest\032#.minisql.master.ListServer" +
+      "sResponse\022_\n\016TriggerBalance\022%.minisql.ma" +
+      "ster.TriggerBalanceRequest\032&.minisql.mas" +
+      "ter.TriggerBalanceResponseB)\n\030com.minisq" +
+      "l.master.protoB\013MasterProtoP\001b\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
@@ -686,6 +728,36 @@ public final class MasterProto {
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_minisql_master_GetClusterStatsResponse_descriptor,
         new java.lang.String[] { "TotalTables", "TotalRegions", "TotalDataSizeBytes", "TotalRowCount", "AverageRegionSizeMb", "RegionsSplitting", "RegionsMigrating", "TotalQps", });
+    internal_static_minisql_master_ListServersRequest_descriptor =
+      getDescriptor().getMessageTypes().get(43);
+    internal_static_minisql_master_ListServersRequest_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+        internal_static_minisql_master_ListServersRequest_descriptor,
+        new java.lang.String[] { });
+    internal_static_minisql_master_ServerDetail_descriptor =
+      getDescriptor().getMessageTypes().get(44);
+    internal_static_minisql_master_ServerDetail_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+        internal_static_minisql_master_ServerDetail_descriptor,
+        new java.lang.String[] { "ServerId", "Host", "Port", "State", "LoadScore", "RegionCount", "TotalSizeBytes", "LastHeartbeatTime", "UptimeMs", "Address", });
+    internal_static_minisql_master_ListServersResponse_descriptor =
+      getDescriptor().getMessageTypes().get(45);
+    internal_static_minisql_master_ListServersResponse_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+        internal_static_minisql_master_ListServersResponse_descriptor,
+        new java.lang.String[] { "Servers", "TotalCount", "OnlineCount", });
+    internal_static_minisql_master_TriggerBalanceRequest_descriptor =
+      getDescriptor().getMessageTypes().get(46);
+    internal_static_minisql_master_TriggerBalanceRequest_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+        internal_static_minisql_master_TriggerBalanceRequest_descriptor,
+        new java.lang.String[] { });
+    internal_static_minisql_master_TriggerBalanceResponse_descriptor =
+      getDescriptor().getMessageTypes().get(47);
+    internal_static_minisql_master_TriggerBalanceResponse_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+        internal_static_minisql_master_TriggerBalanceResponse_descriptor,
+        new java.lang.String[] { "Success", "Message", "PlansGenerated", });
     com.minisql.common.proto.CommonProto.getDescriptor();
   }
 

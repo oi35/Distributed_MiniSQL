@@ -1,6 +1,8 @@
 package com.minisql.master.service;
 
 import com.google.protobuf.ByteString;
+import com.minisql.master.cluster.ClusterManager;
+import com.minisql.master.cluster.ServerInfo;
 import com.minisql.master.metadata.MetadataManager;
 import com.minisql.master.metadata.RegionMetadata;
 import com.minisql.master.metadata.TableMetadata;
@@ -12,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 客户端Master服务实现 - Master ↔ Client通信
@@ -23,9 +26,11 @@ public class ClientMasterServiceImpl extends ClientMasterServiceGrpc.ClientMaste
     private static final Logger logger = LoggerFactory.getLogger(ClientMasterServiceImpl.class);
 
     private final MetadataManager metadataManager;
+    private final ClusterManager clusterManager;
 
-    public ClientMasterServiceImpl(MetadataManager metadataManager) {
+    public ClientMasterServiceImpl(MetadataManager metadataManager, ClusterManager clusterManager) {
         this.metadataManager = metadataManager;
+        this.clusterManager = clusterManager;
     }
 
     @Override
@@ -365,17 +370,54 @@ public class ClientMasterServiceImpl extends ClientMasterServiceGrpc.ClientMaste
                                 StreamObserver<GetClusterHealthResponse> responseObserver) {
         logger.info("Received GetClusterHealth request");
 
-        // TODO: 实现集群健康检查逻辑
-        GetClusterHealthResponse response = GetClusterHealthResponse.newBuilder()
-                .setStatus(GetClusterHealthResponse.HealthStatus.HEALTHY)
-                .setTotalServers(0)
-                .setOnlineServers(0)
-                .setTotalRegions(0)
-                .setOnlineRegions(0)
-                .build();
+        try {
+            Map<String, Object> stats = clusterManager.getClusterStats();
+            List<ServerInfo> onlineServers = clusterManager.getOnlineServers();
+            List<ServerInfo> allServers = clusterManager.getAllServers();
 
-        responseObserver.onNext(response);
-        responseObserver.onCompleted();
+            int totalRegions = allServers.stream()
+                    .mapToInt(ServerInfo::getRegionCount)
+                    .sum();
+            int onlineRegions = onlineServers.stream()
+                    .mapToInt(ServerInfo::getRegionCount)
+                    .sum();
+
+            GetClusterHealthResponse.HealthStatus status;
+            java.util.List<String> issues = new java.util.ArrayList<>();
+
+            long deadCount = allServers.stream()
+                    .filter(s -> s.getState() == com.minisql.common.proto.ServerState.SERVER_DEAD)
+                    .count();
+
+            if (deadCount > 0) {
+                status = GetClusterHealthResponse.HealthStatus.DEGRADED;
+                issues.add(deadCount + " server(s) are DEAD");
+            } else if (allServers.isEmpty()) {
+                status = GetClusterHealthResponse.HealthStatus.CRITICAL;
+                issues.add("No servers registered");
+            } else {
+                status = GetClusterHealthResponse.HealthStatus.HEALTHY;
+            }
+
+            GetClusterHealthResponse response = GetClusterHealthResponse.newBuilder()
+                    .setStatus(status)
+                    .setTotalServers(allServers.size())
+                    .setOnlineServers(onlineServers.size())
+                    .setTotalRegions(totalRegions)
+                    .setOnlineRegions(onlineRegions)
+                    .addAllIssues(issues)
+                    .build();
+
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+
+        } catch (Exception e) {
+            logger.error("Failed to get cluster health", e);
+            responseObserver.onNext(GetClusterHealthResponse.newBuilder()
+                    .setStatus(GetClusterHealthResponse.HealthStatus.CRITICAL)
+                    .build());
+            responseObserver.onCompleted();
+        }
     }
 
     @Override
@@ -383,15 +425,32 @@ public class ClientMasterServiceImpl extends ClientMasterServiceGrpc.ClientMaste
                                StreamObserver<GetClusterStatsResponse> responseObserver) {
         logger.info("Received GetClusterStats request");
 
-        // TODO: 实现集群统计逻辑
-        GetClusterStatsResponse response = GetClusterStatsResponse.newBuilder()
-                .setTotalTables(0)
-                .setTotalRegions(0)
-                .setTotalDataSizeBytes(0)
-                .setTotalRowCount(0)
-                .build();
+        try {
+            Map<String, Object> stats = clusterManager.getClusterStats();
+            List<ServerInfo> allServers = clusterManager.getAllServers();
 
-        responseObserver.onNext(response);
-        responseObserver.onCompleted();
+            int totalTables = metadataManager.listTables().size();
+            int totalRegions = allServers.stream()
+                    .mapToInt(ServerInfo::getRegionCount)
+                    .sum();
+
+            GetClusterStatsResponse response = GetClusterStatsResponse.newBuilder()
+                    .setTotalTables(totalTables)
+                    .setTotalRegions(totalRegions)
+                    .setTotalDataSizeBytes(0)
+                    .setTotalRowCount(0)
+                    .setAverageRegionSizeMb(totalRegions > 0 ? 0.0 : 0.0)
+                    .setRegionsSplitting(0)
+                    .setRegionsMigrating(0)
+                    .build();
+
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+
+        } catch (Exception e) {
+            logger.error("Failed to get cluster stats", e);
+            responseObserver.onNext(GetClusterStatsResponse.newBuilder().build());
+            responseObserver.onCompleted();
+        }
     }
 }
