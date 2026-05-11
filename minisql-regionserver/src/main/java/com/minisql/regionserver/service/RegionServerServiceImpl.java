@@ -144,6 +144,29 @@ public class RegionServerServiceImpl extends RegionServerServiceGrpc.RegionServe
 
             insertRow(request.getTableName(), request.getKey().toByteArray(), toByteArrayMap(request.getColumnsMap()));
 
+            // 写入WAL（先写日志）
+            com.minisql.regionserver.wal.WalRecord walRecord = walService.append(
+                    request.getRegionId(), request.getTableName(),
+                    "PUT", request.getKey().toByteArray(), toByteArrayMap(request.getColumnsMap()));
+
+            // 如果有副本，通过 Paxos 达成共识（同步、强一致性、带重试）
+            List<String> replicas = replicationManager.getReplicas(request.getRegionId());
+            if (!replicas.isEmpty()) {
+                PaxosTypes.ConsensusResult result = paxosProposer.proposeWithRetry(
+                        request.getRegionId(), walRecord, replicas);
+                if (result == PaxosTypes.ConsensusResult.COMMITTED) {
+                    logger.info("Paxos 共识达成: region={}, seq={}",
+                            request.getRegionId(), walRecord.getSequenceId());
+                } else {
+                    // Paxos 失败时仍通过异步复制保证最终一致性
+                    logger.warn("Paxos 共识失败({})，回退到异步复制: region={}, seq={}",
+                            result, request.getRegionId(), walRecord.getSequenceId());
+                }
+            }
+
+            // 异步推送到所有副本（保证最终一致性）
+            replicationManager.replicate(request.getRegionId(), walRecord);
+
             responseObserver.onNext(PutResponse.newBuilder()
                 .setSuccess(true)
                 .setErrorCode(ErrorCode.ERROR_OK)

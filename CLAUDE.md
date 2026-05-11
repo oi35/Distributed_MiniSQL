@@ -1,265 +1,169 @@
-# Distributed MiniSQL Project - Claude Code Configuration
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
 
-This is a distributed database system for educational purposes, implementing:
-- Data sharding with range-based partitioning
-- Replica management with Paxos consensus
-- Distributed query execution
-- Master-RegionServer architecture
+Distributed database system for educational purposes implementing data sharding with range-based partitioning, replica management with Paxos consensus, and Master-RegionServer architecture.
 
-## Team Structure
+**Current implementation state:** Two modules exist — `minisql-common` (proto definitions) and `minisql-master` (Master server with cluster management, load balancing, and region migration). RegionServer and Client modules are planned but not yet created.
 
-5-person team with specialized roles:
-- **Member 1**: Architecture + Master module
-- **Member 2**: RegionServer module
-- **Member 3**: Replication + Consensus
-- **Member 4**: Client SDK + Distributed queries
-- **Member 5**: Testing + Tools + Documentation
-
-## Project-Specific Skills
-
-Use these skills for domain-specific tasks:
-
-### `distributed-system-debug`
-Debug distributed system issues including network failures, consensus problems, and data inconsistencies.
-
-**When to use:**
-- Master-RegionServer communication failures
-- Region split/migration issues
-- Paxos consensus failures
-- Data inconsistency between replicas
-
-### `grpc-interface-design`
-Design and implement gRPC service interfaces following project conventions.
-
-**When to use:**
-- Adding new RPC methods
-- Modifying protobuf definitions
-- Reviewing gRPC interface changes
-
-### `region-management`
-Implement and debug Region lifecycle operations including split, merge, and migration.
-
-**When to use:**
-- Implementing Region split logic
-- Implementing Region migration
-- Debugging Region state issues
-
-### `paxos-implementation`
-Implement and debug Paxos consensus protocol for replica consistency.
-
-**When to use:**
-- Implementing write operations with Paxos
-- Debugging consensus failures
-- Handling replica failures during consensus
-
-## Specialist Agents
-
-Use these agents for module-specific development:
-
-### `master-specialist`
-Expert in Master module development - cluster management, region allocation, load balancing.
-
-**Dispatch for:**
-- Master service implementation
-- Cluster management features
-- Load balancing algorithms
-- Zookeeper integration
-
-### `regionserver-specialist`
-Expert in RegionServer module - data storage, query execution, region lifecycle.
-
-**Dispatch for:**
-- RegionServer service implementation
-- MySQL integration
-- Query execution
-- Region split operations
-
-### `replication-specialist`
-Expert in replication and consensus - Paxos protocol, WAL logs, replica synchronization.
-
-**Dispatch for:**
-- Paxos implementation
-- WAL system
-- Replica synchronization
-- Failure recovery
-
-### `client-specialist`
-Expert in Client SDK - connection management, query routing, distributed join.
-
-**Dispatch for:**
-- Client API implementation
-- Route caching
-- Distributed query execution
-- Hash Join implementation
-
-## Development Workflow
-
-### 1. Planning Phase
-
-Before implementing features:
-1. Review design document: `docs/superpowers/specs/2026-04-15-distributed-minisql-design.md`
-2. Check implementation plan: `docs/superpowers/plans/`
-3. Coordinate with team members for interface dependencies
-
-### 2. Implementation Phase
-
-Follow TDD approach:
-1. Write failing test
-2. Implement minimal code to pass
-3. Refactor
-4. Commit frequently
-
-### 3. Testing Phase
-
-Test at multiple levels:
-- Unit tests: Individual components
-- Integration tests: Module interactions
-- System tests: End-to-end scenarios
-- Failure tests: Fault injection
-
-### 4. Code Review
-
-All code requires review:
-- Use Pull Request workflow
-- At least one reviewer
-- Architecture lead reviews critical modules
-
-## Code Standards
-
-### Java Style
-
-- Follow Google Java Style Guide
-- Use SLF4J for logging
-- Format: `[timestamp] [level] [component] [thread] message`
-
-### Testing
-
-- JUnit 5 for unit tests
-- Mockito for mocking
-- Coverage > 70% (critical modules > 85%)
-
-### Git Commits
-
-Format: `<type>(<scope>): <description>`
-
-Types:
-- `feat`: New feature
-- `fix`: Bug fix
-- `refactor`: Code refactoring
-- `test`: Add tests
-- `docs`: Documentation
-- `build`: Build system changes
-
-Examples:
-```
-feat(master): implement region assignment logic
-fix(regionserver): handle region split edge case
-test(paxos): add concurrent proposal tests
-```
-
-## Module Dependencies
-
-```
-minisql-common (protobuf definitions)
-    ↓
-    ├── minisql-master
-    ├── minisql-regionserver
-    └── minisql-client
-```
-
-## Build Commands
+## Build & Test Commands
 
 ```bash
-# Build all modules
-mvn clean install
+# Build minisql-common first (generates protobuf stubs, installs to local .m2)
+cd minisql-common && mvn clean install
 
-# Build specific module
+# Build minisql-master (depends on minisql-common)
 cd minisql-master && mvn clean install
 
-# Run tests
-mvn test
+# Build both from root (if parent POM exists)
+mvn clean install
 
-# Run specific test
-mvn test -Dtest=MasterServiceTest
+# Run all tests in a module
+cd minisql-master && mvn test
 
-# Generate protobuf
+# Run a single test class
+cd minisql-master && mvn test -Dtest=LoadBalancerTest
+
+# Run a single test method
+cd minisql-master && mvn test -Dtest=LoadBalancerTest#testBalancedAssignment
+
+# Generate JaCoCo coverage report (runs with test phase)
+cd minisql-master && mvn test
+# Report at: minisql-master/target/site/jacoco/index.html
+
+# Regenerate protobuf stubs
 cd minisql-common && mvn clean compile
 ```
 
-## Running Services
+## Running Master Server
 
-### Start Master
+```bash
+cd minisql-master && mvn exec:java -Dexec.mainClass="com.minisql.master.MasterServer"
+```
+
+Or with arguments and env vars:
+
 ```bash
 cd minisql-master
-mvn exec:java -Dexec.mainClass="com.minisql.master.MasterServer"
+MASTER_PORT=9000 MASTER_ID=master-01 ZK_CONNECT=localhost:2181 \
+  mvn exec:java -Dexec.mainClass="com.minisql.master.MasterServer"
 ```
 
-### Start RegionServer
-```bash
-cd minisql-regionserver
-mvn exec:java -Dexec.mainClass="com.minisql.regionserver.RegionServerMain" -Dexec.args="rs-001 8001"
+**Startup flow:** Zookeeper connection → Master election → (on win) start gRPC server + heartbeat monitor. Default port 8000. Requires Zookeeper running at `localhost:2181` (override with `ZK_CONNECT` env var).
+
+**Env vars:** `MASTER_PORT` (default 8000), `MASTER_ID` (auto-generated if unset), `ZK_CONNECT` (default `localhost:2181`).
+
+## Package Structure
+
 ```
+minisql-common/
+└── src/main/proto/
+    ├── common.proto       — Shared types (RegionInfo, TableSchema, enums, error codes)
+    ├── master.proto       — MasterService + ClientMasterService gRPC definitions
+    └── regionserver.proto — RegionServerService gRPC definitions (for future use)
+
+minisql-master/
+└── src/main/java/com/minisql/master/
+    ├── MasterServer.java                    — Entry point, gRPC server, lifecycle
+    ├── cluster/
+    │   ├── ClusterManager.java              — RegionServer registry, state tracking
+    │   ├── HeartbeatMonitor.java            — Periodic heartbeat timeout detection
+    │   ├── FailureRecoveryManager.java      — Handles RegionServer failures
+    │   └── ServerInfo.java                  — RegionServer metadata model
+    ├── metadata/
+    │   ├── MetadataManager.java             — Table/Region metadata CRUD
+    │   ├── RouteTable.java                  — Region routing table
+    │   ├── TableMetadata.java               — Table schema + Region list
+    │   └── RegionMetadata.java              — Region state + replica info
+    ├── balance/
+    │   ├── LoadBalancer.java                — Region distribution algorithm
+    │   ├── LoadBalancerConfig.java          — Balance thresholds configuration
+    │   ├── RegionMigrationManager.java      — Migration lifecycle orchestration
+    │   ├── MigrationTask.java               — Single migration job model
+    │   ├── MigrationPlan.java               — Multi-task migration plan
+    │   ├── MigrationState.java              — State enum + transitions
+    │   ├── MigrationExecutor.java           — Executes migration steps
+    │   ├── MigrationStateHandler.java       — Per-phase handler interface
+    │   ├── PrepareHandler.java              — Prepare phase
+    │   ├── SyncHandler.java                 — Data sync phase
+    │   ├── SwitchHandler.java               — Switchover phase
+    │   ├── RollbackHandler.java             — Rollback on failure
+    │   ├── SyncProgress.java                — Sync progress tracking
+    │   ├── MigrationStatistics.java         — Migration metrics
+    │   ├── MigrationConfig.java             — Migration tuning parameters
+    │   └── MigrationException.java          — Migration error types
+    ├── service/
+    │   ├── MasterServiceImpl.java           — MasterService gRPC impl (RegionServer-facing)
+    │   └── ClientMasterServiceImpl.java     — ClientMasterService gRPC impl (client-facing)
+    └── zk/
+        ├── ZookeeperClient.java             — ZK connection + CRUD helpers
+        ├── MasterElection.java              — Leader election via ZK ephemeral nodes
+        └── MetadataPersistence.java         — ZK-backed metadata storage paths
+```
+
+## Dependencies
+
+```
+minisql-common (proto gRPC stubs) → must be installed before minisql-master
+    ↓
+minisql-master
+```
+
+Key runtime dependencies: gRPC/Netty (1.58.0), Protobuf (3.24.0), Zookeeper (3.9.1), Guava (32.1.3), Gson (2.10.1).
+
+## Code Standards
+
+- Java 11, Maven, Google Java Style
+- SLF4J for logging; format: `[timestamp] [level] [component] [thread] message`
+- **JUnit 4.13.2** for tests, Mockito 5.14.2 for mocking
+- Code coverage > 70% (critical modules > 85%) — JaCoCo 0.8.11
+- Git commits: `<type>(<scope>): <description>` (feat, fix, refactor, test, docs, build)
+
+## Proto Workflow
+
+Protobuf definitions live in `minisql-common/src/main/proto/`. The `protobuf-maven-plugin` generates Java stubs during `mvn compile`. After changing `.proto` files:
+
+```bash
+cd minisql-common && mvn clean install
+```
+
+This regenerates stubs and installs them to the local Maven repo so `minisql-master` can pick them up.
 
 ## Common Issues
 
-### Issue: Protobuf compilation fails
+**Proto compilation fails:** `cd minisql-common && mvn clean && mvn compile`
 
-**Solution:**
-```bash
-cd minisql-common
-mvn clean
-mvn compile
-```
+**Master depends on stale common:** Run `cd minisql-common && mvn clean install` first.
 
-### Issue: gRPC connection refused
+**gRPC connection refused:** Check Zookeeper is running, Master has won election, port matches.
 
-**Check:**
-1. Master/RegionServer is running
-2. Port is not blocked by firewall
-3. Correct host:port in configuration
+**Region not found:** Check Master route table, verify RegionServer has region loaded, refresh client cache.
 
-### Issue: Region not found
+## Team Structure
 
-**Debug:**
-1. Check Master's route table
-2. Verify RegionServer has region loaded
-3. Refresh client cache
+5-person educational team: Member 1 (Architecture + Master), Member 2 (RegionServer), Member 3 (Replication + Consensus), Member 4 (Client SDK + Distributed queries), Member 5 (Testing + Tools + Documentation).
+
+## Specialist Agents & Skills
+
+The `.claude/` directory contains project-specific agents and skills. See `.claude/README.md` for usage details.
+
+**Agents:** `master-specialist`, `regionserver-specialist`, `replication-specialist`, `client-specialist`
+
+**Skills:** `distributed-system-debug`, `grpc-interface-design`, `region-management`, `paxos-implementation`
 
 ## Documentation
 
-- Architecture: `docs/superpowers/specs/2026-04-15-distributed-minisql-design.md`
-- Team division: `docs/team-division.md`
+- gRPC interface design: `docs/interface-design.md`
+- Architecture spec: `docs/superpowers/specs/2026-04-15-distributed-minisql-design.md`
 - Implementation plans: `docs/superpowers/plans/`
-- API docs: Generate with `mvn javadoc:javadoc`
+- Team division: `docs/team-division.md`
 
-## Performance Targets
+## Key Design Decisions
 
-- Single table point query: < 10ms
-- Single table range query: > 1000 QPS
-- Two table join query: < 100ms
-- System availability: > 99%
-
-## When to Ask for Help
-
-- Unclear requirements → Ask user for clarification
-- Design decisions → Consult architecture lead (Member 1)
-- Interface conflicts → Coordinate with relevant team member
-- Stuck on bug → Use `distributed-system-debug` skill
-
-## Autonomous Work Guidelines
-
-When working autonomously:
-1. Follow implementation plans strictly
-2. Write tests before implementation
-3. Commit after each completed task
-4. Document non-obvious decisions
-5. Flag blocking issues immediately
-
-## Remember
-
-- This is an educational project - clarity over optimization
-- Distributed systems are complex - test thoroughly
-- Communication is key - coordinate with team
-- Document your work - help future maintainers
+- **Explicit RPC methods** over generic ones for core operations (type safety, clarity for learning)
+- **Range-based partitioning** with `[start_key, end_key)` intervals
+- **Zookeeper** for Master HA election and metadata persistence
+- **State machine** for Region lifecycle (OFFLINE → OPENING → ONLINE → SPLITTING/MIGRATING → CLOSED)
+- **Multi-phase migration**: Prepare → Sync → Switch (with Rollback on failure)
