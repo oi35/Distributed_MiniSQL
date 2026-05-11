@@ -11,7 +11,6 @@ public class WalRecord {
     private final String operation;
     private final byte[] key;
     private final Map<String, byte[]> columns;
-    private final byte[] checksum;
 
     public WalRecord(long sequenceId,
                      String regionId,
@@ -19,8 +18,7 @@ public class WalRecord {
                      long timestamp,
                      String operation,
                      byte[] key,
-                     Map<String, byte[]> columns,
-                     byte[] checksum) {
+                     Map<String, byte[]> columns) {
         this.sequenceId = sequenceId;
         this.regionId = regionId;
         this.tableName = tableName;
@@ -28,7 +26,6 @@ public class WalRecord {
         this.operation = operation;
         this.key = key;
         this.columns = new LinkedHashMap<>(columns);
-        this.checksum = checksum;
     }
 
     public long getSequenceId() {
@@ -57,9 +54,5 @@ public class WalRecord {
 
     public Map<String, byte[]> getColumns() {
         return new LinkedHashMap<>(columns);
-    }
-
-    public byte[] getChecksum() {
-        return checksum;
     }
 }
