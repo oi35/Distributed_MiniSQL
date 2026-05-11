@@ -51,7 +51,7 @@ public class PaxosProposer {
     private static final Logger logger = LoggerFactory.getLogger(PaxosProposer.class);
 
     private final String serverId;
-    private final PaxosAcceptor localAcceptor; // 本地的 Acceptor（主节点也参与投票）
+    private final PaxosAcceptor localAcceptor;
     private final Map<String, ManagedChannel> replicaChannels;
     private final ExecutorService phaseExecutor;
 
@@ -67,9 +67,9 @@ public class PaxosProposer {
     private static final int MAX_RETRIES = 3;
     private static final long BASE_BACKOFF_MS = 100;
 
-    public PaxosProposer(String serverId) {
+    public PaxosProposer(String serverId, PaxosAcceptor localAcceptor) {
         this.serverId = serverId;
-        this.localAcceptor = new PaxosAcceptor(serverId);
+        this.localAcceptor = localAcceptor;
         this.replicaChannels = new ConcurrentHashMap<>();
         this.phaseExecutor = Executors.newCachedThreadPool(r -> {
             Thread t = new Thread(r, "paxos-phase");

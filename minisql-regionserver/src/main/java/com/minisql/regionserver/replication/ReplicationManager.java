@@ -56,6 +56,31 @@ public class ReplicationManager implements Closeable {
                 Runtime.getRuntime().availableProcessors());
     }
 
+    /**
+     * 根据Master下发的RegionInfo设置副本拓扑。
+     *
+     * @param regionId       Region ID
+     * @param primaryServer  主副本地址
+     * @param replicaServers 所有副本地址列表（含主副本自身）
+     */
+    public void setReplicasFromRegionInfo(String regionId, String primaryServer,
+                                          List<String> replicaServers) {
+        // 排除主副本自身，仅保留从副本地址
+        List<String> followerReplicas = new ArrayList<>();
+        if (replicaServers != null) {
+            for (String addr : replicaServers) {
+                if (!addr.equals(primaryServer)) {
+                    followerReplicas.add(addr);
+                }
+            }
+        }
+        setReplicas(regionId, followerReplicas);
+        logger.info("Region {} 从Master元数据同步副本拓扑: primary={}, replicas={}",
+                regionId, primaryServer, followerReplicas);
+    }
+
+    /** @deprecated 推荐使用 setReplicasFromRegionInfo */
+    @Deprecated
     public void setReplicas(String regionId, List<String> replicas) {
         regionReplicas.put(regionId, new ArrayList<>(replicas));
         watermarkMap.put(regionId, new ConcurrentHashMap<>());
@@ -144,6 +169,115 @@ public class ReplicationManager implements Closeable {
             health.put(entry.getKey(), entry.getValue().get() < MAX_CONSECUTIVE_FAILURES);
         }
         return health;
+    }
+
+    /**
+     * 获取不健康的副本列表（失败次数超过阈值）。
+     */
+    public List<String> getUnhealthyReplicas(String regionId) {
+        List<String> unhealthy = new ArrayList<>();
+        Map<String, AtomicLong> failures = failureCountMap.get(regionId);
+        if (failures == null) {
+            return unhealthy;
+        }
+        for (Map.Entry<String, AtomicLong> entry : failures.entrySet()) {
+            if (entry.getValue().get() >= MAX_CONSECUTIVE_FAILURES) {
+                unhealthy.add(entry.getKey());
+            }
+        }
+        return unhealthy;
+    }
+
+    /**
+     * 触发副本恢复 —— 从WAL中增量拉取副本缺失的日志，进行全量追赶。
+     *
+     * @param regionId    Region ID
+     * @param replicaAddr 需要恢复的副本地址
+     * @param walService  WAL服务（用于读取日志）
+     * @param primaryAddr 主节点地址（用于副本从主节点拉取日志）
+     * @return 恢复是否成功
+     */
+    public boolean recoverReplica(String regionId, String replicaAddr,
+                                  WalService walService, String primaryAddr) {
+        logger.info("开始副本恢复: region={}, replica={}, primary={}",
+                regionId, replicaAddr, primaryAddr);
+
+        try {
+            // 1. 获取副本的当前水印（最后成功应用的序列号）
+            long replicaWatermark = getMinWatermark(regionId);
+            // 如果该副本有记录的水印，使用它；否则从头开始
+            Map<String, Long> watermarks = watermarkMap.get(regionId);
+            if (watermarks != null && watermarks.containsKey(replicaAddr)) {
+                replicaWatermark = watermarks.get(replicaAddr);
+            }
+
+            // 2. 从本地WAL中读取增量日志
+            long latestSeq = walService.getGlobalLatestSequenceId();
+            long startSeq = replicaWatermark + 1;
+
+            logger.info("副本恢复: region={}, 从seq={}恢复到seq={}, 共{}条",
+                    regionId, startSeq, latestSeq, latestSeq - startSeq + 1);
+
+            if (startSeq > latestSeq) {
+                // 副本已经是最新的
+                resetFailureCount(regionId, replicaAddr);
+                logger.info("副本已是最新状态，无需恢复: region={}, replica={}", regionId, replicaAddr);
+                return true;
+            }
+
+            // 3. 读取增量日志并批量发送
+            List<WalRecord> records = walService.getRecords(regionId, startSeq, latestSeq);
+            if (records.isEmpty()) {
+                // 尝试从所有region读取（可能是region不匹配）
+                records = walService.getRecords(null, startSeq, latestSeq);
+            }
+
+            if (!records.isEmpty()) {
+                batchReplicateToSingleReplica(regionId, replicaAddr, records);
+                // 更新水印
+                long maxSeq = records.get(records.size() - 1).getSequenceId();
+                updateWatermark(regionId, replicaAddr, maxSeq);
+                resetFailureCount(regionId, replicaAddr);
+
+                logger.info("副本恢复成功: region={}, replica={}, 恢复{}条, 水印更新到{}",
+                        regionId, replicaAddr, records.size(), maxSeq);
+                return true;
+            } else {
+                // 没有增量日志，直接标记为已恢复
+                resetFailureCount(regionId, replicaAddr);
+                logger.info("副本恢复完成（无增量日志）: region={}, replica={}", regionId, replicaAddr);
+                return true;
+            }
+
+        } catch (Exception e) {
+            logger.error("副本恢复失败: region={}, replica={}", regionId, replicaAddr, e);
+            recordFailure(regionId, replicaAddr);
+            return false;
+        }
+    }
+
+    /**
+     * 检查并自动恢复不健康的副本。
+     *
+     * 对每个region检查不健康副本，对每个不健康副本尝试恢复。
+     *
+     * @return 成功恢复的副本数量
+     */
+    public int autoRecoverUnhealthyReplicas(WalService walService, String primaryAddr) {
+        int recovered = 0;
+        for (String regionId : regionReplicas.keySet()) {
+            List<String> unhealthy = getUnhealthyReplicas(regionId);
+            for (String replicaAddr : unhealthy) {
+                if (recoverReplica(regionId, replicaAddr, walService, primaryAddr)) {
+                    recovered++;
+                }
+            }
+        }
+        if (recovered > 0) {
+            logger.info("自动恢复完成: {}/{} 个不健康副本已恢复", recovered,
+                    regionReplicas.size());
+        }
+        return recovered;
     }
 
     private void replicateToSingleReplica(String regionId, String replicaAddr, WalRecord record) {
