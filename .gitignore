@@ -17,3 +17,8 @@ WORK-SUMMARY-*.md
 # Log files
 logs/
 *.log
+# Test result documentation
+FINAL-SUMMARY.md
+ALL-TESTS-PASSING.md
+TEST-RESULTS.md
+E2E-STRESS-TEST-RESULTS.md
