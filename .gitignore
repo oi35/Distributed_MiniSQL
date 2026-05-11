@@ -14,9 +14,6 @@ target/
 INTEGRATION-TEST-*.md
 WORK-SUMMARY-*.md
 
-# Log files
-logs/
-*.log
 # Test result documentation
 FINAL-SUMMARY.md
 ALL-TESTS-PASSING.md
