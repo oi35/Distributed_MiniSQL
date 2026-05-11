@@ -47,13 +47,6 @@ public class WalManager implements Closeable {
                     output.writeInt(value.length);
                     output.write(value);
                 }
-                byte[] checksum = record.getChecksum();
-                if (checksum != null) {
-                    output.writeInt(checksum.length);
-                    output.write(checksum);
-                } else {
-                    output.writeInt(0);
-                }
             } catch (IOException e) {
                 throw new IllegalStateException("Failed to append WAL record", e);
             }
@@ -83,13 +76,7 @@ public class WalManager implements Closeable {
                     input.readFully(value);
                     columns.put(columnName, value);
                 }
-                int checksumLen = input.readInt();
-                byte[] checksum = null;
-                if (checksumLen > 0) {
-                    checksum = new byte[checksumLen];
-                    input.readFully(checksum);
-                }
-                records.add(new WalRecord(sequenceId, regionId, tableName, timestamp, operation, key, columns, checksum));
+                records.add(new WalRecord(sequenceId, regionId, tableName, timestamp, operation, key, columns));
             }
         } catch (EOFException ignored) {
             return records;
