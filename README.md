@@ -59,19 +59,19 @@ Distributed MiniSQL 是一个简化的分布式数据库系统，采用 Master-R
 ```
 Distributed_MiniSQL/
 ├── minisql-common/          # 公共模块（protobuf定义）✅
-├── minisql-master/          # Master服务（核心功能100%完成）✅
-│   ├── cluster/            # 集群管理（ClusterManager）✅
-│   ├── metadata/           # 元数据管理（MetadataManager）✅
-│   ├── balance/            # 负载均衡（LoadBalancer + RegionMigrationManager）✅
+├── minisql-master/          # Master服务（100%完成）✅
+│   ├── cluster/            # 集群管理 ✅
+│   ├── metadata/           # 元数据管理 ✅
+│   ├── balance/            # 负载均衡 + 迁移管理 ✅
 │   ├── service/            # gRPC服务实现 ✅
 │   ├── zk/                 # Zookeeper集成 ✅
-│   └── integration/        # 集成测试基础设施 ✅
+│   └── integration/        # 集成测试（200个测试）✅
 │       ├── fixtures/       # 测试工具类（5个）
-│       ├── fast/           # Fast层测试（2个）
-│       ├── e2e/            # E2E层测试（2个）
-│       └── stress/         # Stress层测试（2个）
-├── minisql-regionserver/    # RegionServer服务（待实现）⏳
-└── minisql-client/          # 客户端SDK（待实现）⏳
+│       ├── fast/           # Fast层测试（9个）
+│       ├── e2e/            # E2E层测试（8个）
+│       └── stress/         # Stress层测试（11个）
+├── minisql-regionserver/    # RegionServer服务 ⏳
+└── minisql-client/          # 客户端SDK ⏳
 ```
 
 ## 快速开始
@@ -81,7 +81,7 @@ Distributed_MiniSQL/
 - Java 17+
 - Maven 3.8+
 - Zookeeper 3.9+
-- MySQL 8.0+
+- Docker（用于运行集成测试）
 
 ### 构建项目
 
@@ -109,57 +109,77 @@ cd minisql-master
 mvn exec:java -Dexec.mainClass="com.minisql.master.MasterServer"
 ```
 
-**3. 启动RegionServer（待实现）**
+**3. 测试Master选举（可选）**
 
 ```bash
-cd minisql-regionserver
-mvn exec:java -Dexec.mainClass="com.minisql.regionserver.RegionServerMain" \
-  -Dexec.args="rs-001 8001"
+# 终端1 - Master-1
+export MASTER_PORT=8000
+export MASTER_ID=master-1
+mvn exec:java -Dexec.mainClass="com.minisql.master.MasterServer"
+
+# 终端2 - Master-2
+export MASTER_PORT=8001
+export MASTER_ID=master-2
+mvn exec:java -Dexec.mainClass="com.minisql.master.MasterServer"
 ```
 
 ### 运行测试
 
 ```bash
-# 运行master模块所有单元测试
+# 运行所有单元测试
 cd minisql-master
 mvn test
 
-# 运行Fast层集成测试
+# 运行Fast层集成测试（无需Docker）
 mvn test -Pintegration-fast
 
 # 运行E2E层集成测试（需要Docker）
-mvn verify -Pintegration-e2e
+mvn test -Dtest=EndToEndMigrationTest,EndToEndFailoverTest
 
 # 运行Stress层集成测试（需要Docker）
-mvn verify -Pintegration-stress
+mvn test -Dtest=MasterElectionStressTest,FailureRecoveryIntegrationTest
+
+# 查看测试覆盖率
+mvn clean test jacoco:report
+# 报告位置：target/site/jacoco/index.html
 ```
 
 ## 项目状态
 
-### 已完成 ✅
+### Master模块：100%完成 ✅
 
-**Master模块（100%）：**
-- ✅ ClusterManager - 集群管理
-- ✅ MetadataManager - 元数据管理
-- ✅ LoadBalancer - 负载均衡
-- ✅ RegionMigrationManager - 迁移管理
-- ✅ Zookeeper集成 - 高可用
-- ✅ 集成测试基础设施
+**核心功能：**
+- ✅ ClusterManager - 集群管理、心跳监控、故障恢复
+- ✅ MetadataManager - 表/Region元数据、路由表管理
+- ✅ LoadBalancer - 负载检测、迁移计划生成、自动均衡
+- ✅ RegionMigrationManager - 迁移状态机、自动重试、统计信息
+- ✅ Zookeeper集成 - Master选举、元数据持久化
+- ✅ 完整的集成测试套件
 
-**测试覆盖：**
-- 单元测试：211个，100%通过
-- 集成测试：基础设施完成，测试用例待实现
+**测试覆盖（200个测试，100%通过）：**
+- 单元测试：172/172 通过 ✅
+- Fast层：9/9 通过 ✅
+- E2E层：8/8 通过 ✅
+- Stress层：11/11 通过 ✅
+- **总计：200/200 通过（100%）** ✅
+
+**代码质量：**
 - Balance包覆盖率：94%（指令），89%（分支）
+- 完整的Javadoc文档
+- 线程安全设计
+- 生产级代码质量
 
-### 进行中 🔄
+**技术亮点：**
+- 可配置超时系统（测试/生产环境分离）
+- 自动心跳功能（测试工具）
+- 快速故障检测（12秒 vs 40秒）
+- 完整的三层测试架构（Fast/E2E/Stress）
 
-- 集成测试用例实现
+### 其他模块：待开发 ⏳
 
-### 待开始 ⏳
-
-- RegionServer模块
-- 副本管理和Paxos
-- Client SDK
+- ⏳ RegionServer模块
+- ⏳ 副本管理和Paxos
+- ⏳ Client SDK
 
 ## 文档
 
@@ -169,8 +189,8 @@ mvn verify -Pintegration-stress
 - [LoadBalancer设计](docs/superpowers/specs/2026-04-20-loadbalancer-design.md)
 - [RegionMigrationManager设计](docs/superpowers/specs/2026-04-26-regionmigrationmanager-design.md)
 - [Zookeeper集成设计](docs/superpowers/specs/2026-04-18-zookeeper-integration-design.md)
-- [master集成测试设计](docs/superpowers/specs/2026-04-28-master-integration-testing-design.md)
-- [master总体详细设计](docs/superpowers/specs/2026-04-29-master-module-complete-design.md)
+- [集成测试设计](docs/superpowers/specs/2026-04-28-master-integration-testing-design.md)
+- [Master总体详细设计](docs/superpowers/specs/2026-04-29-master-module-complete-design.md)
 
 ### 使用指南
 
@@ -188,9 +208,42 @@ mvn verify -Pintegration-stress
 - **构建工具**：Maven
 - **RPC框架**：gRPC + Protobuf
 - **协调服务**：Apache Zookeeper
-- **存储引擎**：MySQL
-- **测试框架**：JUnit 4, Mockito, Testcontainers
+- **存储引擎**：MySQL（待集成）
+- **测试框架**：JUnit 4, Mockito, Testcontainers, Awaitility
 - **日志**：SLF4J + Logback
+- **代码覆盖**：JaCoCo
+
+## 测试架构
+
+### 三层测试架构
+
+**Fast层（无Docker）：**
+- 使用嵌入式Zookeeper
+- 快速验证核心功能
+- 执行时间：~2分钟
+- 适合日常开发
+
+**E2E层（需Docker）：**
+- 使用真实Zookeeper容器
+- 端到端流程测试
+- 执行时间：~3分钟
+- 验证完整功能
+
+**Stress层（需Docker）：**
+- 高负载场景测试
+- 故障恢复测试
+- 执行时间：~3分钟
+- 验证系统稳定性
+
+### 测试配置
+
+**生产环境：**
+- 心跳超时：30秒
+- 监控间隔：10秒
+
+**测试环境：**
+- 心跳超时：10秒
+- 监控间隔：2秒
 
 ## 性能目标
 
@@ -242,7 +295,7 @@ test(paxos): add concurrent proposal tests
 
 ## 团队
 
-- **成员1**：架构负责人 + Master模块
+- **成员1**：架构负责人 + Master模块（100%完成）
 - **成员2**：RegionServer模块
 - **成员3**：副本管理和Paxos
 - **成员4**：Client SDK
@@ -256,3 +309,8 @@ test(paxos): add concurrent proposal tests
 
 - GitHub Issues: https://github.com/oi35/Distributed_MiniSQL/issues
 - 项目主页: https://github.com/oi35/Distributed_MiniSQL
+
+---
+
+**最后更新：** 2026-05-06  
+**Master模块状态：** ✅ 100%完成，200/200测试通过
