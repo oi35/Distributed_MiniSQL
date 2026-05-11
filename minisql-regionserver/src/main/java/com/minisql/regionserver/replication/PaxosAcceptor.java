@@ -15,6 +15,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * 3. Commit阶段： 将已接受的提案应用到状态机
  *
  * Acceptor 的状态是持久的（通过跟踪已接受的最高提案编号保证一致性）
+ *
+ * 线程安全：使用 per-region 锁保证同一 region 的 check-then-act 操作原子性。
  */
 public class PaxosAcceptor {
 
@@ -22,7 +24,6 @@ public class PaxosAcceptor {
 
     private final String serverId;
 
-    // 每个 region 有一个独立的 Paxos 实例
     // regionId → 该 region 已承诺的最高提案编号
     private final Map<String, PaxosTypes.ProposalNumber> highestPromised;
 
@@ -35,13 +36,21 @@ public class PaxosAcceptor {
     // regionId → 该 region 最后提交的提案编号
     private final Map<String, PaxosTypes.ProposalNumber> lastCommittedProposal;
 
+    // per-region 锁，保证 check-then-act 操作的原子性
+    private final Map<String, Object> regionLocks;
+
     public PaxosAcceptor(String serverId) {
         this.serverId = serverId;
         this.highestPromised = new ConcurrentHashMap<>();
         this.lastAcceptedProposal = new ConcurrentHashMap<>();
         this.lastAcceptedValue = new ConcurrentHashMap<>();
         this.lastCommittedProposal = new ConcurrentHashMap<>();
+        this.regionLocks = new ConcurrentHashMap<>();
         logger.info("PaxosAcceptor 初始化完成: server={}", serverId);
+    }
+
+    private Object getRegionLock(String regionId) {
+        return regionLocks.computeIfAbsent(regionId, k -> new Object());
     }
 
     /**
@@ -49,33 +58,27 @@ public class PaxosAcceptor {
      *
      * 规则：如果传入的提案编号 > 已承诺的最高编号，则承诺（返回 Promise），
      * 并且附带上次已接受的值（如果有的话）。否则拒绝。
-     *
-     * 为什么附带上次已接受的值？
-     * 如果之前有一个提案已经进入了 Accept 阶段但没完成 Commit（比如
-     * 提案者故障了），新提案者需要继承这个值，保证一致性。
      */
     public PaxosTypes.PromiseResponse handlePrepare(PaxosTypes.PrepareRequest request) {
         String regionId = request.getRegionId();
         PaxosTypes.ProposalNumber proposalNumber = request.getProposalNumber();
 
-        PaxosTypes.ProposalNumber currentHighest = highestPromised.get(regionId);
+        synchronized (getRegionLock(regionId)) {
+            PaxosTypes.ProposalNumber currentHighest = highestPromised.get(regionId);
 
-        // 如果这是第一个提案，或者新提案编号大于已承诺的
-        if (currentHighest == null || proposalNumber.compareTo(currentHighest) > 0) {
-            // 记录新的承诺
-            highestPromised.put(regionId, proposalNumber);
+            if (currentHighest == null || proposalNumber.compareTo(currentHighest) > 0) {
+                highestPromised.put(regionId, proposalNumber);
 
-            // 检查是否有之前已接受但可能未提交的值
-            PaxosTypes.ProposalNumber lastAccepted = lastAcceptedProposal.get(regionId);
-            byte[] lastValue = lastAcceptedValue.get(regionId);
+                PaxosTypes.ProposalNumber lastAccepted = lastAcceptedProposal.get(regionId);
+                byte[] lastValue = lastAcceptedValue.get(regionId);
 
-            logger.debug("Prepare 承诺: region={}, proposal={}", regionId, proposalNumber);
-            return new PaxosTypes.PromiseResponse(true, proposalNumber, lastAccepted, lastValue);
-        } else {
-            // 拒绝：已经有更高的提案编号被承诺
-            logger.debug("Prepare 拒绝: region={}, proposal={}, 已承诺={}",
-                    regionId, proposalNumber, currentHighest);
-            return new PaxosTypes.PromiseResponse(false, proposalNumber, null, null);
+                logger.debug("Prepare 承诺: region={}, proposal={}", regionId, proposalNumber);
+                return new PaxosTypes.PromiseResponse(true, proposalNumber, lastAccepted, lastValue);
+            } else {
+                logger.debug("Prepare 拒绝: region={}, proposal={}, 已承诺={}",
+                        regionId, proposalNumber, currentHighest);
+                return new PaxosTypes.PromiseResponse(false, proposalNumber, null, null);
+            }
         }
     }
 
@@ -83,28 +86,26 @@ public class PaxosAcceptor {
      * 处理 Accept 请求。
      *
      * 规则：如果 proposalNumber >= 已承诺的最高编号，则接受该值。
-     *
-     * 注意：用的是 >= 而不是 >，因为同一个提案可能重试。
      */
     public PaxosTypes.AcceptedResponse handleAccept(PaxosTypes.AcceptRequest request) {
         String regionId = request.getRegionId();
         PaxosTypes.ProposalNumber proposalNumber = request.getProposalNumber();
 
-        PaxosTypes.ProposalNumber currentHighest = highestPromised.get(regionId);
+        synchronized (getRegionLock(regionId)) {
+            PaxosTypes.ProposalNumber currentHighest = highestPromised.get(regionId);
 
-        if (currentHighest == null || proposalNumber.compareTo(currentHighest) >= 0) {
-            // 接受该提案
-            lastAcceptedProposal.put(regionId, proposalNumber);
-            lastAcceptedValue.put(regionId, request.getValue());
-            highestPromised.put(regionId, proposalNumber);
+            if (currentHighest == null || proposalNumber.compareTo(currentHighest) >= 0) {
+                lastAcceptedProposal.put(regionId, proposalNumber);
+                lastAcceptedValue.put(regionId, request.getValue());
+                highestPromised.put(regionId, proposalNumber);
 
-            logger.debug("Accept 接受: region={}, proposal={}", regionId, proposalNumber);
-            return new PaxosTypes.AcceptedResponse(true, proposalNumber);
-        } else {
-            // 拒绝：我们已经承诺了更高的提案编号
-            logger.debug("Accept 拒绝: region={}, proposal={}, 已承诺={}",
-                    regionId, proposalNumber, currentHighest);
-            return new PaxosTypes.AcceptedResponse(false, proposalNumber);
+                logger.debug("Accept 接受: region={}, proposal={}", regionId, proposalNumber);
+                return new PaxosTypes.AcceptedResponse(true, proposalNumber);
+            } else {
+                logger.debug("Accept 拒绝: region={}, proposal={}, 已承诺={}",
+                        regionId, proposalNumber, currentHighest);
+                return new PaxosTypes.AcceptedResponse(false, proposalNumber);
+            }
         }
     }
 
@@ -118,52 +119,58 @@ public class PaxosAcceptor {
         String regionId = request.getRegionId();
         PaxosTypes.ProposalNumber proposalNumber = request.getProposalNumber();
 
-        PaxosTypes.ProposalNumber lastAccepted = lastAcceptedProposal.get(regionId);
+        synchronized (getRegionLock(regionId)) {
+            PaxosTypes.ProposalNumber lastAccepted = lastAcceptedProposal.get(regionId);
 
-        // 只能提交我们已接受的同一提案
-        if (lastAccepted != null && lastAccepted.compareTo(proposalNumber) == 0) {
-            lastCommittedProposal.put(regionId, proposalNumber);
-            logger.info("Commit 完成: region={}, proposal={}", regionId, proposalNumber);
-            return true;
+            if (lastAccepted != null && lastAccepted.compareTo(proposalNumber) == 0) {
+                lastCommittedProposal.put(regionId, proposalNumber);
+                logger.info("Commit 完成: region={}, proposal={}", regionId, proposalNumber);
+                return true;
+            }
+
+            logger.warn("Commit 失败（未事先接受）: region={}, proposal={}, lastAccepted={}",
+                    regionId, proposalNumber, lastAccepted);
+            return false;
         }
-
-        logger.warn("Commit 失败（未事先接受）: region={}, proposal={}, lastAccepted={}",
-                regionId, proposalNumber, lastAccepted);
-        return false;
     }
 
     /**
      * 获取最后已提交的值（用于故障恢复时查询）。
      */
     public byte[] getCommittedValue(String regionId) {
-        PaxosTypes.ProposalNumber committed = lastCommittedProposal.get(regionId);
-        if (committed == null) {
+        synchronized (getRegionLock(regionId)) {
+            PaxosTypes.ProposalNumber committed = lastCommittedProposal.get(regionId);
+            if (committed == null) {
+                return null;
+            }
+
+            PaxosTypes.ProposalNumber accepted = lastAcceptedProposal.get(regionId);
+            if (accepted != null && accepted.compareTo(committed) >= 0) {
+                return lastAcceptedValue.get(regionId);
+            }
             return null;
         }
-
-        PaxosTypes.ProposalNumber accepted = lastAcceptedProposal.get(regionId);
-        // 已提交且已接受的提案中存储的值
-        if (accepted != null && accepted.compareTo(committed) >= 0) {
-            return lastAcceptedValue.get(regionId);
-        }
-        return null;
     }
 
     /**
      * 获取最后提交的提案编号。
      */
     public PaxosTypes.ProposalNumber getLastCommittedProposal(String regionId) {
-        return lastCommittedProposal.get(regionId);
+        synchronized (getRegionLock(regionId)) {
+            return lastCommittedProposal.get(regionId);
+        }
     }
 
     /**
      * 重置某个 region 的状态（region 关闭时调用）。
      */
     public void resetRegion(String regionId) {
-        highestPromised.remove(regionId);
-        lastAcceptedProposal.remove(regionId);
-        lastAcceptedValue.remove(regionId);
-        lastCommittedProposal.remove(regionId);
+        synchronized (getRegionLock(regionId)) {
+            highestPromised.remove(regionId);
+            lastAcceptedProposal.remove(regionId);
+            lastAcceptedValue.remove(regionId);
+            lastCommittedProposal.remove(regionId);
+        }
         logger.info("PaxosAcceptor 重置 region: {}", regionId);
     }
 }

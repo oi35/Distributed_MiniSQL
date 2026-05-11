@@ -36,7 +36,7 @@ public class ReplicationTest {
         tempDir = Files.createTempDirectory("wal-test-");
         walService = new WalService(tempDir.toString(), "test-rs-001");
         acceptor = new PaxosAcceptor("test-rs-001");
-        proposer = new PaxosProposer("test-rs-001");
+        proposer = new PaxosProposer("test-rs-001", acceptor);
         replicationManager = new ReplicationManager();
     }
 

@@ -1,5 +1,8 @@
 package com.minisql.regionserver.wal;
 
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -29,6 +32,41 @@ public class WalRecord {
         this.key = key;
         this.columns = new LinkedHashMap<>(columns);
         this.checksum = checksum;
+    }
+
+    /**
+     * Deserialize a WalRecord from the PaxosProposer binary format.
+     * Format: seqId(long) + regionId(UTF) + tableName(UTF) + timestamp(long)
+     * + operation(UTF) + keyLen(int)+key(bytes) + colCount(int) + perCol(UTF+int+bytes)
+     * + checksumLen(int)+checksum(bytes).
+     */
+    public static WalRecord deserialize(byte[] data) throws IOException {
+        try (DataInputStream dis = new DataInputStream(new ByteArrayInputStream(data))) {
+            long seqId = dis.readLong();
+            String regionId = dis.readUTF();
+            String tableName = dis.readUTF();
+            long timestamp = dis.readLong();
+            String operation = dis.readUTF();
+            int keyLen = dis.readInt();
+            byte[] key = new byte[keyLen];
+            dis.readFully(key);
+            int colCount = dis.readInt();
+            Map<String, byte[]> columns = new LinkedHashMap<>();
+            for (int i = 0; i < colCount; i++) {
+                String colName = dis.readUTF();
+                int valLen = dis.readInt();
+                byte[] val = new byte[valLen];
+                dis.readFully(val);
+                columns.put(colName, val);
+            }
+            int checksumLen = dis.readInt();
+            byte[] checksum = null;
+            if (checksumLen > 0) {
+                checksum = new byte[checksumLen];
+                dis.readFully(checksum);
+            }
+            return new WalRecord(seqId, regionId, tableName, timestamp, operation, key, columns, checksum);
+        }
     }
 
     public long getSequenceId() {

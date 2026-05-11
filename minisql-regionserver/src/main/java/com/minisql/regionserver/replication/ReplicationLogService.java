@@ -36,10 +36,10 @@ public class ReplicationLogService {
     // Paxos Acceptor（用于处理 Paxos 协议消息）
     private final PaxosAcceptor paxosAcceptor;
 
-    public ReplicationLogService(WalService walService, String serverId) {
+    public ReplicationLogService(WalService walService, PaxosAcceptor paxosAcceptor) {
         this.walService = walService;
         this.regionStores = new java.util.concurrent.ConcurrentHashMap<>();
-        this.paxosAcceptor = new PaxosAcceptor(serverId);
+        this.paxosAcceptor = paxosAcceptor;
     }
 
     public PaxosAcceptor getPaxosAcceptor() {
@@ -286,21 +286,31 @@ public class ReplicationLogService {
 
     /**
      * 将一条日志条目应用到本地数据存储。
-     *
-     * - PUT 操作：将 key + columns 写入存储
-     * - DELETE 操作：从存储中删除 key
      */
     private void applyLogToStore(RegionDataStore store, ReplicationLogEntry entry) {
         byte[] key = entry.getKey().toByteArray();
         long timestamp = entry.getTimestamp();
 
         if (entry.getOperation() == ReplicationLogEntry.OperationType.PUT) {
-            Map<String, ByteString> columns = new HashMap<>(entry.getColumnsMap());
-            store.upsert(key, columns, timestamp);
-            logger.debug("副本应用PUT: key={}", bytesToHex(key));
+            store.upsert(key, new HashMap<>(entry.getColumnsMap()), timestamp);
         } else if (entry.getOperation() == ReplicationLogEntry.OperationType.DELETE) {
             store.delete(key);
-            logger.debug("副本应用DELETE: key={}", bytesToHex(key));
+        }
+    }
+
+    /**
+     * 将反序列化后的 WalRecord 数据应用到本地存储（用于 Paxos Commit 路径）。
+     */
+    private void applyLogToStore(RegionDataStore store, String operation,
+                                 byte[] key, Map<String, byte[]> columns, long timestamp) {
+        if ("PUT".equalsIgnoreCase(operation)) {
+            Map<String, ByteString> bsColumns = new HashMap<>();
+            for (Map.Entry<String, byte[]> entry : columns.entrySet()) {
+                bsColumns.put(entry.getKey(), ByteString.copyFrom(entry.getValue()));
+            }
+            store.upsert(key, bsColumns, timestamp);
+        } else if ("DELETE".equalsIgnoreCase(operation)) {
+            store.delete(key);
         }
     }
 
@@ -390,13 +400,27 @@ public class ReplicationLogService {
             boolean committed = paxosAcceptor.handleCommit(
                     new PaxosTypes.CommitRequest(proposalNumber, regionId));
 
-            // 提交成功后，将已接受的值应用到数据存储
+            // 提交成功后，反序列化并应用到数据存储
             if (committed) {
                 byte[] value = paxosAcceptor.getCommittedValue(regionId);
                 if (value != null) {
-                    // 写入本地 WAL
-                    walService.append(regionId, "", "COMMIT",
-                            proposalNumber.toString().getBytes(), new HashMap<>());
+                    try {
+                        com.minisql.regionserver.wal.WalRecord deserialized =
+                                com.minisql.regionserver.wal.WalRecord.deserialize(value);
+                        // Write to local WAL with full record data
+                        walService.append(deserialized.getRegionId(), deserialized.getTableName(),
+                                deserialized.getOperation(), deserialized.getKey(),
+                                deserialized.getColumns());
+                        // Apply to local data store
+                        RegionDataStore store = regionStores.get(regionId);
+                        if (store != null) {
+                            applyLogToStore(store, deserialized.getOperation(),
+                                    deserialized.getKey(), deserialized.getColumns(),
+                                    deserialized.getTimestamp());
+                        }
+                    } catch (Exception e) {
+                        logger.error("反序列化 Paxos 提交值失败: region={}", regionId, e);
+                    }
                 }
             }
 

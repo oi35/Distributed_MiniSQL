@@ -253,6 +253,16 @@ public class RegionServerServiceImplTest {
                 new CapturingObserver<>());
 
         Object readerService = newService("rs-wal", props);
+        // RegionServer重启后需要重新打开Region（模拟Master重新下发openRegion指令）
+        invoke(readerService, "openRegion",
+                new Class<?>[]{OpenRegionRequest.class, StreamObserver.class},
+                OpenRegionRequest.newBuilder()
+                        .setRegion(RegionInfo.newBuilder()
+                                .setRegionId("region-wal")
+                                .setTableName("users")
+                                .build())
+                        .build(),
+                new CapturingObserver<>());
         CapturingObserver<GetResponse> getObserver = new CapturingObserver<>();
         invoke(readerService, "get",
                 new Class<?>[]{GetRequest.class, StreamObserver.class},
