@@ -5,6 +5,7 @@ import com.minisql.master.cluster.ClusterManager;
 import com.minisql.master.cluster.FailureRecoveryManager;
 import com.minisql.master.cluster.HeartbeatMonitor;
 import com.minisql.master.metadata.MetadataManager;
+import com.minisql.master.service.AdminServiceImpl;
 import com.minisql.master.service.ClientMasterServiceImpl;
 import com.minisql.master.service.MasterServiceImpl;
 import com.minisql.master.zk.MasterElection;
