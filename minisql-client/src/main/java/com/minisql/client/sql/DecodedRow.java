@@ -5,7 +5,7 @@ import com.minisql.common.proto.TableSchema;
 
 import java.util.Map;
 
-public final class DecodedRow {
+public class DecodedRow {
 
     private final TableSchema schema;
     private final ByteString key;
@@ -20,11 +20,19 @@ public final class DecodedRow {
         this.columns = columns;
     }
 
+    public TableSchema schema() { return schema; }
+
     public TableSchema getSchema() { return schema; }
+
+    public ByteString key() { return key; }
 
     public ByteString getKey() { return key; }
 
+    public Map<String, ByteString> rawColumns() { return rawColumns; }
+
     public Map<String, ByteString> getRawColumns() { return rawColumns; }
+
+    public Map<String, Object> columns() { return columns; }
 
     public Map<String, Object> getColumns() { return columns; }
 

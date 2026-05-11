@@ -13,6 +13,9 @@ import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.select.FromItem;
 import net.sf.jsqlparser.statement.select.Join;
+import net.sf.jsqlparser.statement.select.Limit;
+import net.sf.jsqlparser.statement.select.Offset;
+import net.sf.jsqlparser.statement.select.OrderByElement;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.SelectExpressionItem;
 import net.sf.jsqlparser.statement.select.SelectItem;
@@ -21,47 +24,67 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
 
 public class JoinExecutor {
 
     private static final Logger LOG = LoggerFactory.getLogger(JoinExecutor.class);
 
+    private final MiniSQLClient client;
     private final TableSchemaCache schemas;
     private final TableScanner scanner;
 
     public JoinExecutor(MiniSQLClient client, TableSchemaCache schemas) {
+        this.client = Objects.requireNonNull(client, "client");
         this.schemas = Objects.requireNonNull(schemas, "schemas");
-        this.scanner = new TableScanner(Objects.requireNonNull(client, "client"));
+        this.scanner = new TableScanner(client);
     }
 
     public SqlResult execute(PlainSelect plain) {
         JoinPlan plan = plan(plain);
 
+        Expression where = plain.getWhere();
+        Predicate wherePred = (where != null)
+                ? PredicateBuilder.build(where, plan.left.schema, plan.right.schema)
+                : Predicate.alwaysTrue();
+
+        JoinPredicateSplitter.SplitResult split =
+                JoinPredicateSplitter.split(wherePred, plan.left.schema, plan.right.schema);
+
+        ExecutorService executor = client.scanExecutor();
+
+        CompletableFuture<List<DecodedRow>> leftFuture = CompletableFuture.supplyAsync(
+                () -> scanWithFilter(plan.left.schema, split.leftOnly), executor);
+        CompletableFuture<List<DecodedRow>> rightFuture = CompletableFuture.supplyAsync(
+                () -> scanWithFilter(plan.right.schema, split.rightOnly), executor);
+
+        List<DecodedRow> leftRows = leftFuture.join();
+        List<DecodedRow> rightRows = rightFuture.join();
+
         Map<ByteString, List<DecodedRow>> buildSide = new HashMap<>();
-        for (DecodedRow row : scanner.scanAll(plan.left.schema)) {
+        for (DecodedRow row : leftRows) {
             ByteString key = row.rawValue(plan.left.joinColumn.getName());
-            if (key == null) {
-                continue;
-            }
+            if (key == null) continue;
             buildSide.computeIfAbsent(key, k -> new ArrayList<>()).add(row);
         }
 
         List<Map<String, Object>> outRows = new ArrayList<>();
-        for (DecodedRow right : scanner.scanAll(plan.right.schema)) {
+        for (DecodedRow right : rightRows) {
             ByteString key = right.rawValue(plan.right.joinColumn.getName());
-            if (key == null) {
-                continue;
-            }
+            if (key == null) continue;
             List<DecodedRow> matches = buildSide.get(key);
-            if (matches == null) {
-                continue;
-            }
+            if (matches == null) continue;
             for (DecodedRow left : matches) {
+                if (!split.postJoin.test(new JoinedRow(left, right, plan))) {
+                    continue;
+                }
                 outRows.add(project(plan, left, right));
             }
         }
@@ -70,7 +93,24 @@ public class JoinExecutor {
                 plan.left.schema.getTableName(), plan.right.schema.getTableName(),
                 outRows.size());
 
+        List<OrderByApplier.SortKey> sortKeys = extractOrderBy(plain);
+        int limit = extractLimit(plain);
+        int offset = extractOffset(plain);
+        if (!sortKeys.isEmpty() || limit > 0 || offset > 0) {
+            outRows = OrderByApplier.apply(outRows, sortKeys, limit, offset);
+        }
+
         return SqlResult.rows(plan.outputColumns, outRows);
+    }
+
+    private List<DecodedRow> scanWithFilter(TableSchema schema, Predicate filter) {
+        List<DecodedRow> result = new ArrayList<>();
+        for (DecodedRow row : scanner.scanAll(schema)) {
+            if (filter.test(row)) {
+                result.add(row);
+            }
+        }
+        return result;
     }
 
     private JoinPlan plan(PlainSelect plain) {
@@ -85,11 +125,6 @@ public class JoinExecutor {
                 || join.isCross() || join.isSemi()) {
             throw new MiniSQLClientException(
                     "only INNER JOIN is supported",
-                    ErrorCode.ERROR_UNIMPLEMENTED);
-        }
-        if (plain.getWhere() != null) {
-            throw new MiniSQLClientException(
-                    "WHERE clause with JOIN is not supported yet",
                     ErrorCode.ERROR_UNIMPLEMENTED);
         }
 
@@ -380,5 +415,63 @@ public class JoinExecutor {
             this.projections = projections;
             this.outputColumns = outputColumns;
         }
+    }
+
+    private static final class JoinedRow extends DecodedRow {
+        private final DecodedRow left;
+        private final DecodedRow right;
+
+        JoinedRow(DecodedRow left, DecodedRow right, JoinPlan plan) {
+            super(left.schema(), left.key(), left.rawColumns(), left.columns());
+            this.left = left;
+            this.right = right;
+        }
+
+        @Override
+        public Object get(String column) {
+            Object val = left.get(column);
+            if (val != null) return val;
+            return right.get(column);
+        }
+    }
+
+    private static List<OrderByApplier.SortKey> extractOrderBy(PlainSelect plain) {
+        List<OrderByElement> elements = plain.getOrderByElements();
+        if (elements == null || elements.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<OrderByApplier.SortKey> keys = new ArrayList<>(elements.size());
+        for (OrderByElement elem : elements) {
+            Expression expr = elem.getExpression();
+            if (!(expr instanceof Column)) {
+                throw new MiniSQLClientException(
+                        "ORDER BY only supports column references: " + expr,
+                        ErrorCode.ERROR_UNIMPLEMENTED);
+            }
+            keys.add(new OrderByApplier.SortKey(
+                    ((Column) expr).getColumnName(), elem.isAsc()));
+        }
+        return keys;
+    }
+
+    private static int extractLimit(PlainSelect plain) {
+        Limit limit = plain.getLimit();
+        if (limit == null || limit.getRowCount() == null) return 0;
+        Object val = PredicateBuilder.literalValue(limit.getRowCount());
+        return (val instanceof Number) ? ((Number) val).intValue() : 0;
+    }
+
+    private static int extractOffset(PlainSelect plain) {
+        Offset offset = plain.getOffset();
+        if (offset != null && offset.getOffset() != null) {
+            Object val = PredicateBuilder.literalValue(offset.getOffset());
+            if (val instanceof Number) return ((Number) val).intValue();
+        }
+        Limit limit = plain.getLimit();
+        if (limit != null && limit.getOffset() != null) {
+            Object val = PredicateBuilder.literalValue(limit.getOffset());
+            if (val instanceof Number) return ((Number) val).intValue();
+        }
+        return 0;
     }
 }

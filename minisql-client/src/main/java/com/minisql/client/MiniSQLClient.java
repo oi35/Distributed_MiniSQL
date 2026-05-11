@@ -28,6 +28,11 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class MiniSQLClient implements AutoCloseable {
 
@@ -38,30 +43,62 @@ public class MiniSQLClient implements AutoCloseable {
     private final ClientMasterServiceGrpc.ClientMasterServiceBlockingStub masterStub;
     private final RouteCache routeCache;
     private final ConnectionManager connectionManager;
+    private final ExecutorService scanExecutor;
+    private final boolean ownsScanExecutor;
+    private final ParallelScanner parallelScanner;
 
     public static MiniSQLClient connect(String masterAddress) {
         ManagedChannel channel = ManagedChannelBuilder.forTarget(masterAddress)
                 .usePlaintext()
                 .build();
-        return new MiniSQLClient(channel, true, new ConnectionManager());
+        return new MiniSQLClient(channel, true, new ConnectionManager(), null);
     }
 
     public MiniSQLClient(ManagedChannel masterChannel, ConnectionManager connectionManager) {
-        this(masterChannel, false, connectionManager);
+        this(masterChannel, false, connectionManager, null);
+    }
+
+    public MiniSQLClient(ManagedChannel masterChannel, ConnectionManager connectionManager,
+                         ExecutorService scanExecutor) {
+        this(masterChannel, false, connectionManager, scanExecutor);
     }
 
     private MiniSQLClient(ManagedChannel masterChannel,
                           boolean ownsMasterChannel,
-                          ConnectionManager connectionManager) {
+                          ConnectionManager connectionManager,
+                          ExecutorService scanExecutor) {
         this.masterChannel = Objects.requireNonNull(masterChannel, "masterChannel");
         this.ownsMasterChannel = ownsMasterChannel;
         this.connectionManager = Objects.requireNonNull(connectionManager, "connectionManager");
         this.masterStub = ClientMasterServiceGrpc.newBlockingStub(masterChannel);
         this.routeCache = new RouteCache(this.masterStub);
+        if (scanExecutor != null) {
+            this.scanExecutor = scanExecutor;
+            this.ownsScanExecutor = false;
+        } else {
+            this.scanExecutor = defaultScanExecutor();
+            this.ownsScanExecutor = true;
+        }
+        this.parallelScanner = new ParallelScanner(this.scanExecutor, this.connectionManager);
+    }
+
+    private static ExecutorService defaultScanExecutor() {
+        int threads = Math.min(Runtime.getRuntime().availableProcessors() * 2, 16);
+        AtomicInteger counter = new AtomicInteger();
+        ThreadFactory factory = r -> {
+            Thread t = new Thread(r, "minisql-scan-" + counter.getAndIncrement());
+            t.setDaemon(true);
+            return t;
+        };
+        return Executors.newFixedThreadPool(threads, factory);
     }
 
     RouteCache routeCache() {
         return routeCache;
+    }
+
+    public ExecutorService scanExecutor() {
+        return scanExecutor;
     }
 
     public PutResult put(String table, ByteString key, Map<String, ByteString> columns) {
@@ -127,31 +164,38 @@ public class MiniSQLClient implements AutoCloseable {
 
     public List<ScanRow> scan(String table, ByteString startKey, ByteString endKey,
                               int limit, List<String> columns) {
+        return scan(table, startKey, endKey, limit, columns, null);
+    }
+
+    public List<ScanRow> scan(String table, ByteString startKey, ByteString endKey,
+                              int limit, List<String> columns, String filter) {
         List<RouteEntry> routes = routeCache.lookupRange(table, startKey, endKey);
         if (routes.isEmpty()) {
             return List.of();
         }
+        if (routes.size() > 1) {
+            return parallelScanner.scanParallel(table, routes, startKey, endKey, limit, columns, filter);
+        }
+        RouteEntry route = routes.get(0);
+        ScanRequest.Builder builder = ScanRequest.newBuilder()
+                .setTableName(table)
+                .setRegionId(route.getRegionId())
+                .setStartKey(startKey)
+                .setEndKey(endKey)
+                .setLimit(limit > 0 ? limit : 0);
+        if (columns != null) {
+            builder.addAllColumns(columns);
+        }
+        if (filter != null && !filter.isEmpty()) {
+            builder.setFilter(filter);
+        }
+        Iterator<ScanResponse> iter = regionStub(route).scan(builder.build());
         List<ScanRow> collected = new ArrayList<>();
         int remaining = limit > 0 ? limit : Integer.MAX_VALUE;
-        for (RouteEntry route : routes) {
-            if (remaining <= 0) {
-                break;
-            }
-            ScanRequest.Builder builder = ScanRequest.newBuilder()
-                    .setTableName(table)
-                    .setRegionId(route.getRegionId())
-                    .setStartKey(startKey)
-                    .setEndKey(endKey)
-                    .setLimit(remaining == Integer.MAX_VALUE ? 0 : remaining);
-            if (columns != null) {
-                builder.addAllColumns(columns);
-            }
-            Iterator<ScanResponse> iter = regionStub(route).scan(builder.build());
-            while (iter.hasNext() && remaining > 0) {
-                ScanResponse row = iter.next();
-                collected.add(new ScanRow(row.getKey(), row.getColumnsMap(), row.getTimestamp()));
-                remaining--;
-            }
+        while (iter.hasNext() && remaining > 0) {
+            ScanResponse row = iter.next();
+            collected.add(new ScanRow(row.getKey(), row.getColumnsMap(), row.getTimestamp()));
+            remaining--;
         }
         return collected;
     }
@@ -188,6 +232,17 @@ public class MiniSQLClient implements AutoCloseable {
     @Override
     public void close() {
         connectionManager.close();
+        if (ownsScanExecutor) {
+            scanExecutor.shutdown();
+            try {
+                if (!scanExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    scanExecutor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                scanExecutor.shutdownNow();
+            }
+        }
         if (ownsMasterChannel) {
             masterChannel.shutdown();
         }

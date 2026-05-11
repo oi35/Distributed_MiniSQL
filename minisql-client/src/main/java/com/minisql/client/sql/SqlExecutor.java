@@ -16,6 +16,9 @@ import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.delete.Delete;
 import net.sf.jsqlparser.statement.insert.Insert;
+import net.sf.jsqlparser.statement.select.Limit;
+import net.sf.jsqlparser.statement.select.Offset;
+import net.sf.jsqlparser.statement.select.OrderByElement;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
 import net.sf.jsqlparser.statement.select.SelectBody;
@@ -140,10 +143,10 @@ public class SqlExecutor {
         }
 
         PkRangeExtractor.Range range = PkRangeExtractor.extract(predicate, schema);
-        // Scan the whole schema's columns so the predicate can evaluate on any column.
         List<String> scanColumns = allColumnNames(schema);
+        String filter = FilterSerializer.serialize(predicate);
         List<MiniSQLClient.ScanRow> scanned = client.scan(
-                tableName, range.start, range.end, 0, scanColumns);
+                tableName, range.start, range.end, 0, scanColumns, filter);
 
         List<Map<String, Object>> rows = new ArrayList<>(scanned.size());
         for (MiniSQLClient.ScanRow row : scanned) {
@@ -153,6 +156,14 @@ public class SqlExecutor {
             }
             rows.add(projectRow(decoded, projectedColumns));
         }
+
+        List<OrderByApplier.SortKey> sortKeys = extractOrderBy(plain);
+        int limit = extractLimit(plain);
+        int offset = extractOffset(plain);
+        if (!sortKeys.isEmpty() || limit > 0 || offset > 0) {
+            rows = OrderByApplier.apply(rows, sortKeys, limit, offset);
+        }
+
         return SqlResult.rows(projectedColumns, rows);
     }
 
@@ -288,5 +299,54 @@ public class SqlExecutor {
             out.put(col, row.get(col));
         }
         return out;
+    }
+
+    private static List<OrderByApplier.SortKey> extractOrderBy(PlainSelect plain) {
+        List<OrderByElement> elements = plain.getOrderByElements();
+        if (elements == null || elements.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<OrderByApplier.SortKey> keys = new ArrayList<>(elements.size());
+        for (OrderByElement elem : elements) {
+            Expression expr = elem.getExpression();
+            if (!(expr instanceof Column)) {
+                throw new MiniSQLClientException(
+                        "ORDER BY only supports column references: " + expr,
+                        ErrorCode.ERROR_UNIMPLEMENTED);
+            }
+            keys.add(new OrderByApplier.SortKey(
+                    ((Column) expr).getColumnName(), elem.isAsc()));
+        }
+        return keys;
+    }
+
+    private static int extractLimit(PlainSelect plain) {
+        Limit limit = plain.getLimit();
+        if (limit == null || limit.getRowCount() == null) {
+            return 0;
+        }
+        Object val = PredicateBuilder.literalValue(limit.getRowCount());
+        if (val instanceof Number) {
+            return ((Number) val).intValue();
+        }
+        return 0;
+    }
+
+    private static int extractOffset(PlainSelect plain) {
+        Offset offset = plain.getOffset();
+        if (offset != null && offset.getOffset() != null) {
+            Object val = PredicateBuilder.literalValue(offset.getOffset());
+            if (val instanceof Number) {
+                return ((Number) val).intValue();
+            }
+        }
+        Limit limit = plain.getLimit();
+        if (limit != null && limit.getOffset() != null) {
+            Object val = PredicateBuilder.literalValue(limit.getOffset());
+            if (val instanceof Number) {
+                return ((Number) val).intValue();
+            }
+        }
+        return 0;
     }
 }

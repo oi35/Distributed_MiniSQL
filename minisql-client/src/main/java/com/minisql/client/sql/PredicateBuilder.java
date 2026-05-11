@@ -50,6 +50,32 @@ public final class PredicateBuilder {
         return comparison(where, schema);
     }
 
+    public static Predicate build(Expression where, TableSchema left, TableSchema right) {
+        if (where == null) {
+            return Predicate.alwaysTrue();
+        }
+        if (where instanceof AndExpression) {
+            AndExpression and = (AndExpression) where;
+            return Predicate.and(build(and.getLeftExpression(), left, right),
+                    build(and.getRightExpression(), left, right));
+        }
+        if (where instanceof OrExpression) {
+            OrExpression or = (OrExpression) where;
+            return Predicate.or(build(or.getLeftExpression(), left, right),
+                    build(or.getRightExpression(), left, right));
+        }
+        if (where instanceof Between) {
+            Between b = (Between) where;
+            String col = requireColumnEither(b.getLeftExpression(), left, right);
+            Object lo = literalValue(b.getBetweenExpressionStart());
+            Object hi = literalValue(b.getBetweenExpressionEnd());
+            return Predicate.and(
+                    Predicate.comparison(col, Predicate.Op.GTE, lo),
+                    Predicate.comparison(col, Predicate.Op.LTE, hi));
+        }
+        return comparisonEither(where, left, right);
+    }
+
     private static Predicate comparison(Expression expr, TableSchema schema) {
         String col;
         Object literal;
@@ -119,5 +145,73 @@ public final class PredicateBuilder {
         throw new MiniSQLClientException(
                 "unsupported literal expression: " + expr,
                 ErrorCode.ERROR_UNIMPLEMENTED);
+    }
+
+    private static String requireColumnEither(Expression expr, TableSchema left, TableSchema right) {
+        if (!(expr instanceof Column)) {
+            throw new MiniSQLClientException(
+                    "WHERE left side must be a column reference",
+                    ErrorCode.ERROR_INVALID_ARGUMENT);
+        }
+        String name = ((Column) expr).getColumnName();
+        String found = findColumnInEither(name, left, right);
+        if (found == null) {
+            throw new MiniSQLClientException(
+                    "column " + name + " not found in either table",
+                    ErrorCode.ERROR_NOT_FOUND);
+        }
+        return found;
+    }
+
+    private static Predicate comparisonEither(Expression expr, TableSchema left, TableSchema right) {
+        String col;
+        Object literal;
+        Predicate.Op op;
+        if (expr instanceof EqualsTo) {
+            EqualsTo e = (EqualsTo) expr;
+            col = requireColumnEither(e.getLeftExpression(), left, right);
+            literal = literalValue(e.getRightExpression());
+            op = Predicate.Op.EQ;
+        } else if (expr instanceof NotEqualsTo) {
+            NotEqualsTo e = (NotEqualsTo) expr;
+            col = requireColumnEither(e.getLeftExpression(), left, right);
+            literal = literalValue(e.getRightExpression());
+            op = Predicate.Op.NEQ;
+        } else if (expr instanceof GreaterThan) {
+            GreaterThan e = (GreaterThan) expr;
+            col = requireColumnEither(e.getLeftExpression(), left, right);
+            literal = literalValue(e.getRightExpression());
+            op = Predicate.Op.GT;
+        } else if (expr instanceof GreaterThanEquals) {
+            GreaterThanEquals e = (GreaterThanEquals) expr;
+            col = requireColumnEither(e.getLeftExpression(), left, right);
+            literal = literalValue(e.getRightExpression());
+            op = Predicate.Op.GTE;
+        } else if (expr instanceof MinorThan) {
+            MinorThan e = (MinorThan) expr;
+            col = requireColumnEither(e.getLeftExpression(), left, right);
+            literal = literalValue(e.getRightExpression());
+            op = Predicate.Op.LT;
+        } else if (expr instanceof MinorThanEquals) {
+            MinorThanEquals e = (MinorThanEquals) expr;
+            col = requireColumnEither(e.getLeftExpression(), left, right);
+            literal = literalValue(e.getRightExpression());
+            op = Predicate.Op.LTE;
+        } else {
+            throw new MiniSQLClientException(
+                    "unsupported WHERE expression: " + expr,
+                    ErrorCode.ERROR_UNIMPLEMENTED);
+        }
+        return Predicate.comparison(col, op, literal);
+    }
+
+    private static String findColumnInEither(String name, TableSchema left, TableSchema right) {
+        for (com.minisql.common.proto.ColumnSchema col : left.getColumnsList()) {
+            if (col.getName().equalsIgnoreCase(name)) return col.getName();
+        }
+        for (com.minisql.common.proto.ColumnSchema col : right.getColumnsList()) {
+            if (col.getName().equalsIgnoreCase(name)) return col.getName();
+        }
+        return null;
     }
 }
