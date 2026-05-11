@@ -3,6 +3,12 @@ package com.minisql.regionserver.service;
 import com.google.protobuf.ByteString;
 import com.minisql.regionserver.db.MySQLDatabase;
 import com.minisql.regionserver.proto.*;
+import com.minisql.regionserver.replication.PaxosProposer;
+import com.minisql.regionserver.replication.PaxosTypes;
+import com.minisql.regionserver.replication.ReplicationLogService;
+import com.minisql.regionserver.replication.ReplicationManager;
+import com.minisql.regionserver.replication.WalService;
+import com.minisql.regionserver.store.RegionDataStore;
 import com.minisql.common.proto.ErrorCode;
 import com.minisql.common.proto.RegionInfo;
 import io.grpc.stub.StreamObserver;
@@ -10,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Paths;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -29,9 +36,36 @@ public class RegionServerServiceImpl extends RegionServerServiceGrpc.RegionServe
     private final Map<String, RegionInfo> activeRegions = new ConcurrentHashMap<>();
     private volatile long sequenceId = 0;
 
+    private final WalService walService;
+    private final ReplicationLogService replicationLogService;
+    private final ReplicationManager replicationManager;
+    private final PaxosProposer paxosProposer;
+    private final Map<String, RegionDataStore> regionStores = new ConcurrentHashMap<>();
+
+    public WalService getWalService() {
+        return walService;
+    }
+
+    public ReplicationLogService getReplicationLogService() {
+        return replicationLogService;
+    }
+
+    public ReplicationManager getReplicationManager() {
+        return replicationManager;
+    }
+
+    public PaxosProposer getPaxosProposer() {
+        return paxosProposer;
+    }
+
     public RegionServerServiceImpl(String regionServerId) {
         this.regionServerId = regionServerId;
         this.database = new MySQLDatabase("jdbc:mysql://localhost:3306/minisql", "root", "password");
+        String walDir = Paths.get(System.getProperty("user.dir"), "wal", regionServerId).toString();
+        this.walService = new WalService(walDir, regionServerId);
+        this.replicationLogService = new ReplicationLogService(walService, regionServerId);
+        this.replicationManager = new ReplicationManager();
+        this.paxosProposer = new PaxosProposer(regionServerId);
         logger.info("RegionServerServiceImpl initialized for {}", regionServerId);
     }
 
@@ -41,6 +75,12 @@ public class RegionServerServiceImpl extends RegionServerServiceGrpc.RegionServe
         String username = properties.getProperty("mysql.username", "root");
         String password = properties.getProperty("mysql.password", "password");
         this.database = new MySQLDatabase(jdbcUrl, username, password);
+        String walDir = properties.getProperty("wal.dir",
+                Paths.get(System.getProperty("user.dir"), "wal", regionServerId).toString());
+        this.walService = new WalService(walDir, regionServerId);
+        this.replicationLogService = new ReplicationLogService(walService, regionServerId);
+        this.replicationManager = new ReplicationManager();
+        this.paxosProposer = new PaxosProposer(regionServerId);
         logger.info("RegionServerServiceImpl initialized for {} with custom properties", regionServerId);
     }
 
