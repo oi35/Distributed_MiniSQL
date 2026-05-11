@@ -3,6 +3,9 @@ package com.minisql.regionserver.service;
 import com.google.protobuf.ByteString;
 import com.minisql.regionserver.db.MySQLDatabase;
 import com.minisql.regionserver.proto.*;
+import com.minisql.regionserver.replication.PaxosTypes;
+import com.minisql.regionserver.replication.ReplicationLogService;
+import com.minisql.regionserver.replication.WalService;
 import com.minisql.common.proto.ErrorCode;
 import com.minisql.common.proto.RegionInfo;
 import io.grpc.stub.StreamObserver;
@@ -10,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Paths;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -29,9 +33,38 @@ public class RegionServerServiceImpl extends RegionServerServiceGrpc.RegionServe
     private final Map<String, RegionInfo> activeRegions = new ConcurrentHashMap<>();
     private volatile long sequenceId = 0;
 
+    // 副本管理相关组件
+    private final WalService walService;
+    private final ReplicationLogService replicationLogService;
+    private final com.minisql.regionserver.replication.ReplicationManager replicationManager;
+    private final com.minisql.regionserver.replication.PaxosProposer paxosProposer;
+    // 每个 region 的数据存储
+    private final Map<String, com.minisql.regionserver.store.RegionDataStore> regionStores = new ConcurrentHashMap<>();
+
+    public WalService getWalService() {
+        return walService;
+    }
+
+    public ReplicationLogService getReplicationLogService() {
+        return replicationLogService;
+    }
+
+    public com.minisql.regionserver.replication.ReplicationManager getReplicationManager() {
+        return replicationManager;
+    }
+
+    public com.minisql.regionserver.replication.PaxosProposer getPaxosProposer() {
+        return paxosProposer;
+    }
+
     public RegionServerServiceImpl(String regionServerId) {
         this.regionServerId = regionServerId;
         this.database = new MySQLDatabase("jdbc:mysql://localhost:3306/minisql", "root", "password");
+        String walDir = Paths.get(System.getProperty("user.dir"), "wal", regionServerId).toString();
+        this.walService = new WalService(walDir, regionServerId);
+        this.replicationLogService = new ReplicationLogService(walService, regionServerId);
+        this.replicationManager = new com.minisql.regionserver.replication.ReplicationManager();
+        this.paxosProposer = new com.minisql.regionserver.replication.PaxosProposer(regionServerId);
         logger.info("RegionServerServiceImpl initialized for {}", regionServerId);
     }
 
@@ -41,6 +74,12 @@ public class RegionServerServiceImpl extends RegionServerServiceGrpc.RegionServe
         String username = properties.getProperty("mysql.username", "root");
         String password = properties.getProperty("mysql.password", "password");
         this.database = new MySQLDatabase(jdbcUrl, username, password);
+        String walDir = properties.getProperty("wal.dir",
+                Paths.get(System.getProperty("user.dir"), "wal", regionServerId).toString());
+        this.walService = new WalService(walDir, regionServerId);
+        this.replicationLogService = new ReplicationLogService(walService, regionServerId);
+        this.replicationManager = new com.minisql.regionserver.replication.ReplicationManager();
+        this.paxosProposer = new com.minisql.regionserver.replication.PaxosProposer(regionServerId);
         logger.info("RegionServerServiceImpl initialized for {} with custom properties", regionServerId);
     }
 
@@ -144,12 +183,36 @@ public class RegionServerServiceImpl extends RegionServerServiceGrpc.RegionServe
 
             insertRow(request.getTableName(), request.getKey().toByteArray(), toByteArrayMap(request.getColumnsMap()));
 
+            // 写入WAL（先写日志）
+            com.minisql.regionserver.wal.WalRecord walRecord = walService.append(
+                    request.getRegionId(), request.getTableName(),
+                    "PUT", request.getKey().toByteArray(), toByteArrayMap(request.getColumnsMap()));
+
+            // 如果有副本，通过 Paxos 达成共识（同步、强一致性）
+            List<String> replicas = replicationManager.getReplicas(request.getRegionId());
+            if (!replicas.isEmpty()) {
+                PaxosTypes.ConsensusResult result = paxosProposer.propose(
+                        request.getRegionId(), walRecord, replicas);
+                if (result == PaxosTypes.ConsensusResult.COMMITTED) {
+                    logger.info("Paxos 共识达成: region={}, seq={}",
+                            request.getRegionId(), walRecord.getSequenceId());
+                } else {
+                    // Paxos 失败时仍通过异步复制保证最终一致性
+                    logger.warn("Paxos 共识失败({})，回退到异步复制: region={}, seq={}",
+                            result, request.getRegionId(), walRecord.getSequenceId());
+                }
+            }
+
+            // 异步推送到所有副本（保证最终一致性）
+            replicationManager.replicate(request.getRegionId(), walRecord);
+
             responseObserver.onNext(PutResponse.newBuilder()
                 .setSuccess(true)
                 .setErrorCode(ErrorCode.ERROR_OK)
+                .setSequenceId(walRecord.getSequenceId())
                 .build());
 
-            logger.info("PUT operation completed");
+            logger.info("PUT operation completed: seq={}", walRecord.getSequenceId());
 
         } catch (Exception e) {
             logger.error("PUT operation failed", e);
@@ -223,11 +286,20 @@ public class RegionServerServiceImpl extends RegionServerServiceGrpc.RegionServe
 
             boolean deleted = deleteRow(request.getTableName(), request.getKey().toByteArray());
 
+            // 写入WAL
+            com.minisql.regionserver.wal.WalRecord walRecord = walService.append(
+                    request.getRegionId(), request.getTableName(),
+                    "DELETE", request.getKey().toByteArray(), new HashMap<>());
+
+            // 异步推送到所有副本
+            replicationManager.replicate(request.getRegionId(), walRecord);
+
             responseObserver.onNext(DeleteResponse.newBuilder()
                 .setSuccess(deleted)
                 .setExisted(deleted)
                 .setErrorCode(deleted ? ErrorCode.ERROR_OK : ErrorCode.ERROR_NOT_FOUND)
                 .setErrorMessage(deleted ? "" : "Row not found")
+                .setSequenceId(walRecord.getSequenceId())
                 .build());
 
             logger.info("DELETE operation completed: deleted={}", deleted);
@@ -292,10 +364,24 @@ public class RegionServerServiceImpl extends RegionServerServiceGrpc.RegionServe
 
             batchInsert(request.getTableName(), request.getRowsList());
 
+            // 批量写入WAL
+            List<Long> seqIds = new ArrayList<>();
+            List<com.minisql.regionserver.wal.WalRecord> walRecords = new ArrayList<>();
+            for (RowData row : request.getRowsList()) {
+                com.minisql.regionserver.wal.WalRecord walRecord = walService.append(
+                        request.getRegionId(), request.getTableName(),
+                        "PUT", row.getKey().toByteArray(), toByteArrayMap(row.getColumnsMap()));
+                seqIds.add(walRecord.getSequenceId());
+                walRecords.add(walRecord);
+            }
+
+            // 批量异步推送到所有副本
+            replicationManager.batchReplicate(request.getRegionId(), walRecords);
+
             responseObserver.onNext(BatchPutResponse.newBuilder()
                 .setSuccessCount(request.getRowsCount())
                 .setFailedCount(0)
-                .addAllSequenceIds(generateSequenceIds(request.getRowsCount()))
+                .addAllSequenceIds(seqIds)
                 .build());
 
             logger.info("BATCH_PUT operation completed: processed={}", request.getRowsCount());
@@ -359,6 +445,11 @@ public class RegionServerServiceImpl extends RegionServerServiceGrpc.RegionServe
                 results.add(deleted);
                 if (deleted) {
                     deletedCount++;
+                    // 成功删除才写WAL并复制
+                    com.minisql.regionserver.wal.WalRecord walRecord = walService.append(
+                            request.getRegionId(), request.getTableName(),
+                            "DELETE", key.toByteArray(), new HashMap<>());
+                    replicationManager.replicate(request.getRegionId(), walRecord);
                 }
             }
 
@@ -451,6 +542,23 @@ public class RegionServerServiceImpl extends RegionServerServiceGrpc.RegionServe
 
             createRegionTable(request.getRegion());
             activeRegions.put(regionId, request.getRegion());
+
+            // 创建数据存储并注册到副本日志服务
+            com.minisql.regionserver.store.InMemoryRegionDataStore store =
+                    new com.minisql.regionserver.store.InMemoryRegionDataStore();
+            regionStores.put(regionId, store);
+            replicationLogService.registerRegionStore(regionId, store);
+
+            // 设置副本列表（从 RegionInfo 中提取副本服务器地址）
+            if (request.getRegion().getReplicaServersCount() > 0) {
+                List<String> replicas = new ArrayList<>(request.getRegion().getReplicaServersList());
+                replicationManager.setReplicas(regionId, replicas);
+                // 为 Paxos 预建立连接
+                for (String replicaAddr : replicas) {
+                    paxosProposer.ensureConnection(replicaAddr);
+                }
+            }
+
             RegionStats stats = getRegionStats(request.getRegion());
 
             responseObserver.onNext(OpenRegionResponse.newBuilder()
@@ -481,6 +589,16 @@ public class RegionServerServiceImpl extends RegionServerServiceGrpc.RegionServe
                 request.getRegionId(), request.getForce());
 
             RegionInfo removed = activeRegions.remove(request.getRegionId());
+
+            // 清理副本列表
+            replicationManager.setReplicas(request.getRegionId(), new ArrayList<>());
+
+            // 清理数据存储
+            com.minisql.regionserver.store.RegionDataStore store = regionStores.remove(request.getRegionId());
+            if (store != null) {
+                replicationLogService.unregisterRegionStore(request.getRegionId());
+                store.close();
+            }
 
             responseObserver.onNext(CloseRegionResponse.newBuilder()
                 .setSuccess(removed != null)
@@ -539,62 +657,12 @@ public class RegionServerServiceImpl extends RegionServerServiceGrpc.RegionServe
     // Replica synchronization
     @Override
     public void getReplicationLog(GetReplicationLogRequest request, StreamObserver<ReplicationLogEntry> responseObserver) {
-        try {
-            logger.info("GET_REPLICATION_LOG operation: region={}, start={}, end={}",
-                request.getRegionId(), request.getStartSequence(), request.getEndSequence());
-
-            if (!isRegionOnline(request.getRegionId())) {
-                responseObserver.onError(new RuntimeException("Region not online: " + request.getRegionId()));
-                return;
-            }
-
-            responseObserver.onCompleted();
-            logger.info("GET_REPLICATION_LOG operation completed");
-
-        } catch (Exception e) {
-            logger.error("GET_REPLICATION_LOG operation failed", e);
-            responseObserver.onError(e);
-        }
+        replicationLogService.handleGetReplicationLog(request, responseObserver);
     }
 
     @Override
     public void applyReplicationLog(ApplyReplicationLogRequest request, StreamObserver<ApplyReplicationLogResponse> responseObserver) {
-        try {
-            logger.info("APPLY_REPLICATION_LOG operation: region={}, logs={}",
-                request.getRegionId(), request.getLogsCount());
-
-            if (!isRegionOnline(request.getRegionId())) {
-                responseObserver.onNext(ApplyReplicationLogResponse.newBuilder()
-                    .setSuccess(false)
-                    .setAppliedCount(0)
-                    .setLastAppliedSequence(0)
-                    .setErrorCode(ErrorCode.ERROR_REGION_NOT_ONLINE)
-                    .setErrorMessage("Region not online: " + request.getRegionId())
-                    .build());
-                responseObserver.onCompleted();
-                return;
-            }
-
-            responseObserver.onNext(ApplyReplicationLogResponse.newBuilder()
-                .setSuccess(true)
-                .setAppliedCount(request.getLogsCount())
-                .setLastAppliedSequence(request.getLogs(request.getLogsCount() - 1).getSequenceId())
-                .setErrorCode(ErrorCode.ERROR_OK)
-                .build());
-
-            logger.info("APPLY_REPLICATION_LOG operation completed: applied={}", request.getLogsCount());
-
-        } catch (Exception e) {
-            logger.error("APPLY_REPLICATION_LOG operation failed", e);
-            responseObserver.onNext(ApplyReplicationLogResponse.newBuilder()
-                .setSuccess(false)
-                .setAppliedCount(0)
-                .setLastAppliedSequence(0)
-                .setErrorCode(ErrorCode.ERROR_INTERNAL)
-                .setErrorMessage(e.getMessage())
-                .build());
-        }
-        responseObserver.onCompleted();
+        replicationLogService.handleApplyReplicationLog(request, responseObserver);
     }
 
     // Helper methods
