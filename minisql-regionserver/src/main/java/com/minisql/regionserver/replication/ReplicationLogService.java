@@ -31,13 +31,14 @@ public class ReplicationLogService {
 
     private final WalService walService;
     // 每个 region 对应的数据存储（用于应用日志时写入数据）
+    // ConcurrentHashMap：openRegion/closeRegion 和 applyReplicationLog 可能并发访问
     private final Map<String, RegionDataStore> regionStores;
     // Paxos Acceptor（用于处理 Paxos 协议消息）
     private final PaxosAcceptor paxosAcceptor;
 
     public ReplicationLogService(WalService walService, String serverId) {
         this.walService = walService;
-        this.regionStores = new HashMap<>();
+        this.regionStores = new java.util.concurrent.ConcurrentHashMap<>();
         this.paxosAcceptor = new PaxosAcceptor(serverId);
     }
 

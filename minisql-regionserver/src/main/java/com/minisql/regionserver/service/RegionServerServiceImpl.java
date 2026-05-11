@@ -188,10 +188,10 @@ public class RegionServerServiceImpl extends RegionServerServiceGrpc.RegionServe
                     request.getRegionId(), request.getTableName(),
                     "PUT", request.getKey().toByteArray(), toByteArrayMap(request.getColumnsMap()));
 
-            // 如果有副本，通过 Paxos 达成共识（同步、强一致性）
+            // 如果有副本，通过 Paxos 达成共识（同步、强一致性、带重试）
             List<String> replicas = replicationManager.getReplicas(request.getRegionId());
             if (!replicas.isEmpty()) {
-                PaxosTypes.ConsensusResult result = paxosProposer.propose(
+                PaxosTypes.ConsensusResult result = paxosProposer.proposeWithRetry(
                         request.getRegionId(), walRecord, replicas);
                 if (result == PaxosTypes.ConsensusResult.COMMITTED) {
                     logger.info("Paxos 共识达成: region={}, seq={}",

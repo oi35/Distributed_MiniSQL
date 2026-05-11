@@ -14,6 +14,12 @@ target/
 INTEGRATION-TEST-*.md
 WORK-SUMMARY-*.md
 
+# Test result documentation
+FINAL-SUMMARY.md
+ALL-TESTS-PASSING.md
+TEST-RESULTS.md
+E2E-STRESS-TEST-RESULTS.md
+
 # Log files
 logs/
 *.log

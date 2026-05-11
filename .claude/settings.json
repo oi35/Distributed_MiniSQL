@@ -53,7 +53,7 @@
   },
   "preferences": {
     "codeStyle": "google-java-style",
-    "testFramework": "junit5",
+    "testFramework": "junit4",
     "buildTool": "maven",
     "commitStyle": "conventional"
   }

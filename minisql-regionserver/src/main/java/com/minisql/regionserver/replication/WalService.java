@@ -90,10 +90,10 @@ public class WalService implements Closeable {
             throw new IllegalStateException("无法创建WAL目录: " + walDirectory, e);
         }
 
-        // 创建第一个 WAL 文件
+        // 1. 先从已有文件中恢复索引（含序列号、计数器等状态）
+        loadExistingFiles();
+        // 2. 创建新的 WAL 文件（计数器已从已有文件中推导）
         rotateWalFile();
-        // 从已有文件中恢复索引
-        rebuildIndex();
         logger.info("WalService 初始化完成: regionServer={}, 当前序列号={}",
                 regionServerId, sequenceGenerator.get());
     }
@@ -320,46 +320,77 @@ public class WalService implements Closeable {
     /**
      * 从已有WAL文件重建内存索引（启动时调用）。
      */
-    private void rebuildIndex() {
-        logger.info("开始重建WAL索引...");
+    /**
+     * 扫描目录下所有已有 .wal 文件，加载数据到内存索引并恢复状态。
+     * 在构造函数中先于 rotateWalFile 调用，确保计数器从已有文件中推导。
+     */
+    private void loadExistingFiles() {
+        logger.info("开始从已有WAL文件加载数据...");
         long maxSeq = 0;
         int recordCount = 0;
 
-        // 找出目录下所有 .wal 文件
         try {
-            Files.list(walDirectory)
+            java.util.List<Path> walFiles = Files.list(walDirectory)
                     .filter(p -> p.toString().endsWith(".wal"))
                     .sorted()
-                    .forEach(walFile -> {
-                        WalManager manager = new WalManager(
-                                walDirectory, walFile.getFileName().toString());
-                        // 不调用 rotate，直接读取
-                    });
+                    .collect(java.util.stream.Collectors.toList());
+
+            if (walFiles.isEmpty()) {
+                logger.info("未发现已有WAL文件，从零开始");
+                return;
+            }
+
+            // 最后一个文件视为当前活跃文件，其余为归档
+            for (int i = 0; i < walFiles.size(); i++) {
+                Path walFile = walFiles.get(i);
+                String baseName = walFile.getFileName().toString();
+                // 去掉 .wal 后缀
+                String fileNameWithoutExt = baseName.substring(0, baseName.length() - 4);
+                boolean isCurrent = (i == walFiles.size() - 1);
+
+                WalManager manager = new WalManager(walDirectory, fileNameWithoutExt);
+                if (isCurrent) {
+                    currentWalManager = manager;
+                } else {
+                    archivedWalManagers.add(manager);
+                }
+
+                // 从文件名推导计数器（格式: regionServerId-NNN）
+                int lastDash = fileNameWithoutExt.lastIndexOf('-');
+                if (lastDash >= 0) {
+                    try {
+                        int counter = Integer.parseInt(fileNameWithoutExt.substring(lastDash + 1));
+                        if (counter >= walFileCounter) {
+                            walFileCounter = counter;
+                        }
+                    } catch (NumberFormatException ignored) {
+                        // 非标准文件名，忽略
+                    }
+                }
+
+                List<WalRecord> records = manager.loadAll();
+                for (WalRecord record : records) {
+                    indexLock.writeLock().lock();
+                    try {
+                        memoryIndex.put(record.getSequenceId(), record);
+                        regionIndex.computeIfAbsent(record.getRegionId(), k -> new TreeSet<>())
+                                .add(record.getSequenceId());
+                    } finally {
+                        indexLock.writeLock().unlock();
+                    }
+                    if (record.getSequenceId() > maxSeq) {
+                        maxSeq = record.getSequenceId();
+                    }
+                    recordCount++;
+                }
+            }
         } catch (IOException e) {
             logger.warn("扫描WAL目录时出错", e);
         }
 
-        // 从当前 WalManager 加载
-        if (currentWalManager != null) {
-            List<WalRecord> records = currentWalManager.loadAll();
-            for (WalRecord record : records) {
-                indexLock.writeLock().lock();
-                try {
-                    memoryIndex.put(record.getSequenceId(), record);
-                    regionIndex.computeIfAbsent(record.getRegionId(), k -> new TreeSet<>())
-                            .add(record.getSequenceId());
-                } finally {
-                    indexLock.writeLock().unlock();
-                }
-                if (record.getSequenceId() > maxSeq) {
-                    maxSeq = record.getSequenceId();
-                }
-                recordCount++;
-            }
-        }
-
         sequenceGenerator.set(maxSeq);
-        logger.info("WAL索引重建完成: 加载{}条记录, 最大序列号={}", recordCount, maxSeq);
+        logger.info("已有WAL数据加载完成: {}条记录, 最大序列号={}, 计数器={}, 归档{}个",
+                recordCount, maxSeq, walFileCounter, archivedWalManagers.size());
     }
 
     @Override

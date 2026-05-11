@@ -120,8 +120,8 @@ public class PaxosAcceptor {
 
         PaxosTypes.ProposalNumber lastAccepted = lastAcceptedProposal.get(regionId);
 
-        // 只能提交我们已接受的提案
-        if (lastAccepted != null && lastAccepted.compareTo(proposalNumber) >= 0) {
+        // 只能提交我们已接受的同一提案
+        if (lastAccepted != null && lastAccepted.compareTo(proposalNumber) == 0) {
             lastCommittedProposal.put(regionId, proposalNumber);
             logger.info("Commit 完成: region={}, proposal={}", regionId, proposalNumber);
             return true;

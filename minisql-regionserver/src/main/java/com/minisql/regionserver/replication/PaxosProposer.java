@@ -63,6 +63,10 @@ public class PaxosProposer {
     private static final long ACCEPT_TIMEOUT_MS = 3000;
     private static final long COMMIT_TIMEOUT_MS = 2000;
 
+    // 并发提案重试参数
+    private static final int MAX_RETRIES = 3;
+    private static final long BASE_BACKOFF_MS = 100;
+
     public PaxosProposer(String serverId) {
         this.serverId = serverId;
         this.localAcceptor = new PaxosAcceptor(serverId);
@@ -211,6 +215,46 @@ public class PaxosProposer {
             logger.error("Paxos 共识异常: region={}, proposal={}", regionId, proposalNumber, e);
             return PaxosTypes.ConsensusResult.TIMEOUT;
         }
+    }
+
+    /**
+     * 带指数退避重试的提案方法 —— 应对并发提案导致的活锁。
+     *
+     * 当多个 Proposer 同时发起提案时，可能互相覆盖导致不断被拒绝。
+     * 指数退避 + 随机化确保最终有一个提案胜出。
+     *
+     * @param regionId     Region ID
+     * @param record       要共识的 WAL 记录
+     * @param replicaAddrs 所有副本的地址列表
+     * @return 共识结果
+     */
+    public PaxosTypes.ConsensusResult proposeWithRetry(String regionId, WalRecord record,
+                                                        List<String> replicaAddrs) {
+        for (int attempt = 0; attempt < MAX_RETRIES; attempt++) {
+            PaxosTypes.ConsensusResult result = propose(regionId, record, replicaAddrs);
+
+            if (result == PaxosTypes.ConsensusResult.COMMITTED) {
+                return result;
+            }
+
+            if (result == PaxosTypes.ConsensusResult.REJECTED && attempt < MAX_RETRIES - 1) {
+                // 指数退避 + 随机化，防止所有 Proposer 在同一时间重试
+                long delay = (long) (Math.pow(2, attempt) * BASE_BACKOFF_MS
+                        + Math.random() * BASE_BACKOFF_MS);
+                logger.info("Paxos 提案被拒绝，{}ms后重试 (attempt={}/{})",
+                        delay, attempt + 1, MAX_RETRIES);
+                try {
+                    Thread.sleep(delay);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return PaxosTypes.ConsensusResult.TIMEOUT;
+                }
+            }
+        }
+
+        logger.warn("Paxos 提案重试{}次后仍未达成共识, region={}",
+                MAX_RETRIES, regionId);
+        return PaxosTypes.ConsensusResult.REJECTED;
     }
 
     /**
