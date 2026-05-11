@@ -202,11 +202,23 @@ GetRequest request = GetRequest.newBuilder()
 - [x] Region 迁移（migrateRegion）
 - [ ] 负载均衡（由 Master 模块负责）
 
-### Phase 4: 高级功能 ✅
+### Phase 4: 副本管理与一致性协议
 - [x] 批量操作（BatchPut/BatchGet/BatchDelete）
 - [x] 范围扫描（流式正向/反向）
-- [x] 副本同步（ReplicationManager + ReplicationLogService）
-- [x] WAL 日志（WalManager + WalService 含校验和）
+- [x] ReplicationManager — 副本列表管理、水印追踪
+- [x] ReplicationLogService — 副本日志拉取与应用（含checksum校验）
+- [x] 异步副本同步 — WAL 推送 + 批量复制
+- [x] 副本故障检测 — 连续失败计数 + 阈值判定
+- [x] 副本恢复 — 增量WAL追赶
+- [x] Paxos 协议 — Prepare-Accept-Commit 三阶段
+- [x] Paxos Acceptor — 提案承诺/接受/提交 + per-region 并发控制
+- [x] Paxos Proposer — 多数派确认 + 指数退避重试
+- [x] WAL 日志系统（WalManager + WalService）
+- [x] WAL 日志轮转（64MB阈值）+ 归档清理
+- [x] WAL 故障恢复重放（启动时自动重建索引并回放）
+- [x] 数据校验和（MD5 checksum）
+- [ ] 主副本切换（Leader选举 + 角色切换）
+- [ ] RegionServer 向 Master 的注册与心跳集成
 
 ## 测试
 
