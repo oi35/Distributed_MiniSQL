@@ -76,7 +76,7 @@ public class WalManager implements Closeable {
                     input.readFully(value);
                     columns.put(columnName, value);
                 }
-                records.add(new WalRecord(sequenceId, regionId, tableName, timestamp, operation, key, columns));
+                records.add(new WalRecord(sequenceId, regionId, tableName, timestamp, operation, key, columns, null));
             }
         } catch (EOFException ignored) {
             return records;
