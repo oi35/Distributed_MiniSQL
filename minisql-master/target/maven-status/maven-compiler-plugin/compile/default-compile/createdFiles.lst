@@ -36,4 +36,6 @@ com\minisql\master\zk\ZookeeperClient$1.class
 com\minisql\master\zk\MasterElection$MasterStateListener.class
 com\minisql\master\cluster\HeartbeatMonitor.class
 com\minisql\master\zk\MetadataPersistence.class
+com\minisql\master\balance\MigrationConfig$1.class
+com\minisql\master\balance\MigrationState$1.class
 com\minisql\master\cluster\ClusterManager.class
