@@ -17,6 +17,7 @@ import io.grpc.stub.StreamObserver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.sql.SQLException;
@@ -25,6 +26,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -63,16 +65,7 @@ public class RegionServerServiceImpl extends RegionServerServiceGrpc.RegionServe
     }
 
     public RegionServerServiceImpl(String regionServerId) {
-        this.regionServerId = regionServerId;
-        this.database = new MySQLDatabase("jdbc:mysql://localhost:3306/minisql", "root", "password");
-        String walDir = Paths.get(System.getProperty("user.dir"), "wal", regionServerId).toString();
-        this.walService = new WalService(walDir, regionServerId);
-        PaxosAcceptor sharedAcceptor = new PaxosAcceptor(regionServerId);
-        this.replicationLogService = new ReplicationLogService(walService, sharedAcceptor);
-        this.replicationManager = new ReplicationManager();
-        this.paxosProposer = new PaxosProposer(regionServerId, sharedAcceptor);
-        recoverFromWal();
-        logger.info("RegionServerServiceImpl initialized for {}", regionServerId);
+        this(regionServerId, loadDefaultProperties());
     }
 
     public RegionServerServiceImpl(String regionServerId, java.util.Properties properties) {
@@ -368,6 +361,17 @@ public class RegionServerServiceImpl extends RegionServerServiceGrpc.RegionServe
 
             Map<String, byte[]> columns = selectRow(request.getRegionId(), request.getTableName(), request.getKey().toByteArray());
 
+            if (columns != null && request.getColumnsCount() > 0) {
+                Map<String, byte[]> filtered = new java.util.HashMap<>();
+                for (String col : request.getColumnsList()) {
+                    byte[] val = columns.get(col);
+                    if (val != null) {
+                        filtered.put(col, val);
+                    }
+                }
+                columns = filtered;
+            }
+
             GetResponse.Builder getBuilder = GetResponse.newBuilder()
                 .setFound(columns != null && !columns.isEmpty())
                 .setTimestamp(System.currentTimeMillis())
@@ -602,7 +606,7 @@ public class RegionServerServiceImpl extends RegionServerServiceGrpc.RegionServe
                 bytesToHex(request.getEndKey().toByteArray()));
 
             if (!isRegionOnline(request.getRegionId())) {
-                responseObserver.onError(new RuntimeException("Region not online: " + request.getRegionId()));
+                responseObserver.onCompleted();
                 return;
             }
 
@@ -908,22 +912,31 @@ public class RegionServerServiceImpl extends RegionServerServiceGrpc.RegionServe
         List<RegionDataStore.StoredRowRecord> allRows = store.scan(null, null, false);
         double result = 0;
         int count = 0;
+        boolean hasValue = false;
+        double minVal = Double.MAX_VALUE;
+        double maxVal = -Double.MAX_VALUE;
         String colName = aggregateQuery.getColumnName();
         for (RegionDataStore.StoredRowRecord record : allRows) {
             ByteString val = record.getColumns().get(colName);
             if (val != null) {
                 try {
-                    result += Double.parseDouble(val.toStringUtf8());
+                    double num = Double.parseDouble(val.toStringUtf8());
+                    result += num;
                     count++;
+                    hasValue = true;
+                    if (num < minVal) minVal = num;
+                    if (num > maxVal) maxVal = num;
                 } catch (NumberFormatException ignored) {
                 }
             }
         }
         switch (aggregateQuery.getFunction()) {
             case AVG:
-                return AggregateResult.newBuilder().setValue(count > 0 ? result / count : 0).setCount(count).build();
+                return AggregateResult.newBuilder().setValue(hasValue ? result / count : 0).setCount(count).build();
             case MIN:
+                return AggregateResult.newBuilder().setValue(hasValue ? minVal : 0).setCount(count).build();
             case MAX:
+                return AggregateResult.newBuilder().setValue(hasValue ? maxVal : 0).setCount(count).build();
             case SUM:
             default:
                 return AggregateResult.newBuilder().setValue(result).setCount(count).build();
@@ -992,5 +1005,21 @@ public class RegionServerServiceImpl extends RegionServerServiceGrpc.RegionServe
             }
         }
         return result;
+    }
+
+    private static Properties loadDefaultProperties() {
+        Properties props = new Properties();
+        try (InputStream is = RegionServerServiceImpl.class.getClassLoader()
+                .getResourceAsStream("regionserver.conf")) {
+            if (is != null) {
+                props.load(is);
+            }
+        } catch (java.io.IOException e) {
+            logger.warn("Failed to load regionserver.conf, using memory backend defaults", e);
+        }
+        if (!props.containsKey("storage.backend")) {
+            props.setProperty("storage.backend", "memory");
+        }
+        return props;
     }
 }

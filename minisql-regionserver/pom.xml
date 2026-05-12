@@ -149,6 +149,7 @@
                 <configuration>
                     <source>${maven.compiler.source}</source>
                     <target>${maven.compiler.target}</target>
+                    <release>11</release>
                     <useIncrementalCompilation>false</useIncrementalCompilation>
                 </configuration>
             </plugin>
@@ -175,9 +176,9 @@
                             <mainClass>com.minisql.regionserver.RegionServerMain</mainClass>
                         </manifest>
                     </archive>
-                    <descriptorRefs>
-                        <descriptorRef>jar-with-dependencies</descriptorRef>
-                    </descriptorRefs>
+                    <descriptors>
+                        <descriptor>src/assembly/fatjar.xml</descriptor>
+                    </descriptors>
                 </configuration>
                 <executions>
                     <execution>

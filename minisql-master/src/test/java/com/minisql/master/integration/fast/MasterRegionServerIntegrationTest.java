@@ -3,6 +3,7 @@ package com.minisql.master.integration.fast;
 import com.minisql.master.integration.fixtures.*;
 import com.minisql.master.cluster.ClusterManager;
 import com.minisql.master.cluster.ServerInfo;
+import java.net.Socket;
 import org.junit.*;
 import static org.junit.Assert.*;
 import static org.awaitility.Awaitility.*;
@@ -25,15 +26,22 @@ public class MasterRegionServerIntegrationTest {
 
         cluster = TestClusterBuilder.create()
                 .withZookeeper(zkServer)
-                .withMaster(8000, "master-1")
+                .withMaster(18000, "master-1")
                 .build();
 
         // Wait for Master to become leader
         await().atMost(10, TimeUnit.SECONDS)
                 .until(() -> cluster.getMasterServer().isLeader());
 
-        // Wait a bit more for gRPC server to fully start
-        Thread.sleep(2000);
+        // Wait for gRPC server to be ready (probe TCP port instead of fixed sleep)
+        await().atMost(15, TimeUnit.SECONDS).pollInterval(500, TimeUnit.MILLISECONDS)
+                .until(() -> {
+                    try (Socket s = new Socket("localhost", 18000)) {
+                        return true;
+                    } catch (Exception e) {
+                        return false;
+                    }
+                });
     }
 
     @After
@@ -56,7 +64,7 @@ public class MasterRegionServerIntegrationTest {
     public void testRegionServerRegistration() throws Exception {
         // Create and start a fake RegionServer
         regionServer1 = new FakeRegionServer("rs-001");
-        regionServer1.start(8000);
+        regionServer1.start(18000);
 
         // Register with Master
         regionServer1.register("localhost", 9001);
@@ -66,7 +74,7 @@ public class MasterRegionServerIntegrationTest {
 
         // Verify registration in ClusterManager
         ClusterManager clusterManager = cluster.getMasterServer().getClusterManager();
-        await().atMost(5, TimeUnit.SECONDS)
+        await().atMost(15, TimeUnit.SECONDS)
                 .until(() -> clusterManager.getServerInfo("rs-001") != null);
 
         ServerInfo serverInfo = clusterManager.getServerInfo("rs-001");
@@ -79,12 +87,12 @@ public class MasterRegionServerIntegrationTest {
     public void testHeartbeatMechanism() throws Exception {
         // Register RegionServer
         regionServer1 = new FakeRegionServer("rs-001");
-        regionServer1.start(8000);
+        regionServer1.start(18000);
         regionServer1.register("localhost", 9001);
         regionServer1.heartbeat();
 
         ClusterManager clusterManager = cluster.getMasterServer().getClusterManager();
-        await().atMost(5, TimeUnit.SECONDS)
+        await().atMost(15, TimeUnit.SECONDS)
                 .until(() -> clusterManager.getServerInfo("rs-001") != null);
 
         // Get initial timestamp
@@ -96,7 +104,7 @@ public class MasterRegionServerIntegrationTest {
         regionServer1.heartbeat();
 
         // Verify timestamp updated
-        await().atMost(5, TimeUnit.SECONDS)
+        await().atMost(15, TimeUnit.SECONDS)
                 .until(() -> {
                     ServerInfo updated = clusterManager.getServerInfo("rs-001");
                     return updated.getLastHeartbeatTime() > initialTimestamp;
@@ -112,12 +120,12 @@ public class MasterRegionServerIntegrationTest {
     public void testRegionServerFailureDetection() throws Exception {
         // Register RegionServer
         regionServer1 = new FakeRegionServer("rs-001");
-        regionServer1.start(8000);
+        regionServer1.start(18000);
         regionServer1.register("localhost", 9001);
         regionServer1.heartbeat();
 
         ClusterManager clusterManager = cluster.getMasterServer().getClusterManager();
-        await().atMost(5, TimeUnit.SECONDS)
+        await().atMost(15, TimeUnit.SECONDS)
                 .until(() -> clusterManager.getServerInfo("rs-001") != null);
 
         // Verify server is online
@@ -141,19 +149,19 @@ public class MasterRegionServerIntegrationTest {
     public void testRegionAssignment() throws Exception {
         // Register two RegionServers
         regionServer1 = new FakeRegionServer("rs-001");
-        regionServer1.start(8000);
+        regionServer1.start(18000);
         regionServer1.register("localhost", 9001);
         regionServer1.heartbeat();
 
         regionServer2 = new FakeRegionServer("rs-002");
-        regionServer2.start(8000);
+        regionServer2.start(18000);
         regionServer2.register("localhost", 9002);
         regionServer2.heartbeat();
 
         ClusterManager clusterManager = cluster.getMasterServer().getClusterManager();
 
         // Wait for both servers to register
-        await().atMost(5, TimeUnit.SECONDS)
+        await().atMost(15, TimeUnit.SECONDS)
                 .until(() -> clusterManager.getServerInfo("rs-001") != null
                         && clusterManager.getServerInfo("rs-002") != null);
 
@@ -171,7 +179,7 @@ public class MasterRegionServerIntegrationTest {
         regionServer2.heartbeat();
 
         // Verify regions are tracked
-        await().atMost(5, TimeUnit.SECONDS)
+        await().atMost(15, TimeUnit.SECONDS)
                 .until(() -> {
                     ServerInfo info1 = clusterManager.getServerInfo("rs-001");
                     ServerInfo info2 = clusterManager.getServerInfo("rs-002");

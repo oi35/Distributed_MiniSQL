@@ -16,9 +16,14 @@ public class AdminGrpcClient {
     private final ClientMasterServiceGrpc.ClientMasterServiceBlockingStub clientStub;
 
     public AdminGrpcClient(String host, int port) {
-        this.channel = ManagedChannelBuilder.forAddress(host, port)
+        this(ManagedChannelBuilder.forAddress(host, port)
                 .usePlaintext()
-                .build();
+                .build());
+    }
+
+    // Package-private constructor for testing with in-process gRPC channels
+    AdminGrpcClient(ManagedChannel channel) {
+        this.channel = channel;
         this.adminStub = AdminServiceGrpc.newBlockingStub(channel);
         this.clientStub = ClientMasterServiceGrpc.newBlockingStub(channel);
     }
