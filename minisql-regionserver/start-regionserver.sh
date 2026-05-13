@@ -39,5 +39,8 @@ echo "Port: $REGIONSERVER_PORT"
 echo "JAR: $JAR_FILE"
 echo "Logs: $LOG_DIR"
 
-# 启动服务器
-$JAVA $JVM_OPTS -jar "$JAR_FILE" "$REGIONSERVER_ID" "$REGIONSERVER_PORT"
+# 启动服务器（后台运行）
+nohup $JAVA $JVM_OPTS -jar "$JAR_FILE" "$REGIONSERVER_ID" "$REGIONSERVER_PORT" > "$LOG_DIR/regionserver.out" 2>&1 &
+echo $! > "$LOG_DIR/regionserver.pid"
+
+echo "RegionServer started with PID $(cat "$LOG_DIR/regionserver.pid")"

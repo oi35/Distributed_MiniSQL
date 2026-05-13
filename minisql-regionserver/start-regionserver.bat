@@ -35,7 +35,12 @@ echo Port: %REGIONSERVER_PORT%
 echo JAR: %JAR_FILE%
 echo Logs: %LOG_DIR%
 
-REM 启动服务器
-java %JVM_OPTS% -jar "%JAR_FILE%" "%REGIONSERVER_ID%" "%REGIONSERVER_PORT%"
+REM 启动服务器（后台运行）
+start "MiniSQL-RegionServer" "%JAVA%" %JVM_OPTS% -jar "%JAR_FILE%" "%REGIONSERVER_ID%" "%REGIONSERVER_PORT%"
 
-pause
+REM 写入PID文件
+for /f "tokens=2 delims=," %%a in ('wmic process where "name='java.exe' and commandline like '%%MiniSQL-RegionServer%%'" get processid /format:csv 2^>nul') do (
+    if not "%%a"=="" echo %%a > "%LOG_DIR%\regionserver.pid"
+)
+
+echo RegionServer started.

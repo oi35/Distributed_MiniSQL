@@ -37,5 +37,8 @@ echo "Port: $MASTER_PORT"
 echo "JAR: $JAR_FILE"
 echo "Logs: $LOG_DIR"
 
-# 启动服务器
-$JAVA $JVM_OPTS -jar "$JAR_FILE" "$MASTER_PORT"
+# 启动服务器（后台运行）
+nohup $JAVA $JVM_OPTS -jar "$JAR_FILE" "$MASTER_PORT" > "$LOG_DIR/master.out" 2>&1 &
+echo $! > "$LOG_DIR/master.pid"
+
+echo "Master Server started with PID $(cat "$LOG_DIR/master.pid")"

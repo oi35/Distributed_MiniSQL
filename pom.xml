@@ -26,6 +26,7 @@
         <module>minisql-common</module>
         <module>minisql-master</module>
         <module>minisql-regionserver</module>
+        <module>minisql-client</module>
         <module>minisql-admin</module>
     </modules>
 

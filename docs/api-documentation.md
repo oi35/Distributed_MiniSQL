@@ -3,7 +3,7 @@
 ## Overview
 
 The Distributed MiniSQL system exposes APIs at two levels:
-- **gRPC APIs**: Inter-module RPC interfaces (Master ↔ RegionServer, Master ↔ Client, RegionServer ↔ Client)
+- **gRPC APIs**: Inter-module RPC interfaces (Master to RegionServer, Master to Client, RegionServer to Client)
 - **CLI Tool API**: Command-line interface for cluster and table management
 
 ---
@@ -12,23 +12,23 @@ The Distributed MiniSQL system exposes APIs at two levels:
 
 gRPC interfaces are defined using Protocol Buffers (proto3) in `minisql-common/src/main/proto/`.
 
-### 1.1 MasterService (Master ↔ RegionServer)
+### 1.1 MasterService (Master to RegionServer)
 
 **Package**: `minisql.master.MasterService`
 
 | Method | Request | Response | Description |
 |--------|---------|----------|-------------|
-| `RegisterRegionServer` | `RegisterRegionServerRequest` | `RegisterRegionServerResponse` | RegionServer注册到Master |
-| `SendHeartbeat` | `HeartbeatRequest` | `HeartbeatResponse` | RegionServer定期心跳上报 |
-| `UnregisterRegionServer` | `UnregisterRegionServerRequest` | `UnregisterRegionServerResponse` | RegionServer优雅注销 |
-| `ReportRegionOnline` | `ReportRegionOnlineRequest` | `ReportRegionOnlineResponse` | 报告Region已上线 |
-| `ReportRegionClosed` | `ReportRegionClosedRequest` | `ReportRegionClosedResponse` | 报告Region已关闭 |
-| `ReportRegionSplit` | `ReportRegionSplitRequest` | `ReportRegionSplitResponse` | 报告Region分裂 |
-| `ReportMigrationProgress` | `ReportMigrationProgressRequest` | `ReportMigrationProgressResponse` | 报告迁移进度 |
-| `ReportRegionFailure` | `ReportRegionFailureRequest` | `ReportRegionFailureResponse` | 报告Region故障 |
-| `AdminOperation` | `AdminOperationRequest` | `AdminOperationResponse` | 通用管理操作 |
+| `RegisterRegionServer` | `RegisterRegionServerRequest` | `RegisterRegionServerResponse` | RegionServer registers with Master |
+| `SendHeartbeat` | `HeartbeatRequest` | `HeartbeatResponse` | Periodic heartbeat |
+| `UnregisterRegionServer` | `UnregisterRegionServerRequest` | `UnregisterRegionServerResponse` | Graceful unregister |
+| `ReportRegionOnline` | `ReportRegionOnlineRequest` | `ReportRegionOnlineResponse` | Report region online |
+| `ReportRegionClosed` | `ReportRegionClosedRequest` | `ReportRegionClosedResponse` | Report region closed |
+| `ReportRegionSplit` | `ReportRegionSplitRequest` | `ReportRegionSplitResponse` | Report region split |
+| `ReportMigrationProgress` | `ReportMigrationProgressRequest` | `ReportMigrationProgressResponse` | Report migration progress |
+| `ReportRegionFailure` | `ReportRegionFailureRequest` | `ReportRegionFailureResponse` | Report region failure |
+| `AdminOperation` | `AdminOperationRequest` | `AdminOperationResponse` | Generic admin operation |
 
-### 1.2 ClientMasterService (Master ↔ Client)
+### 1.2 ClientMasterService (Master to Client)
 
 **Package**: `minisql.master.ClientMasterService`
 
@@ -36,37 +36,37 @@ gRPC interfaces are defined using Protocol Buffers (proto3) in `minisql-common/s
 
 | Method | Request | Response | Description |
 |--------|---------|----------|-------------|
-| `CreateTable` | `CreateTableRequest` | `CreateTableResponse` | 创建新表 |
-| `DropTable` | `DropTableRequest` | `DropTableResponse` | 删除表 |
-| `GetTableSchema` | `GetTableSchemaRequest` | `GetTableSchemaResponse` | 获取表结构 |
-| `ListTables` | `ListTablesRequest` | `ListTablesResponse` | 列出所有表 |
+| `CreateTable` | `CreateTableRequest` | `CreateTableResponse` | Create new table |
+| `DropTable` | `DropTableRequest` | `DropTableResponse` | Drop table |
+| `GetTableSchema` | `GetTableSchemaRequest` | `GetTableSchemaResponse` | Get table schema |
+| `ListTables` | `ListTablesRequest` | `ListTablesResponse` | List all tables |
 
 #### Route Queries
 
 | Method | Request | Response | Description |
 |--------|---------|----------|-------------|
-| `GetRouteTable` | `GetRouteTableRequest` | `GetRouteTableResponse` | 获取完整路由表 |
-| `GetRouteForKey` | `GetRouteForKeyRequest` | `GetRouteForKeyResponse` | 获取指定键的路由 |
-| `GetRoutesForRange` | `GetRoutesForRangeRequest` | `GetRoutesForRangeResponse` | 获取范围路由 |
-| `ReportStaleRoute` | `ReportStaleRouteRequest` | `ReportStaleRouteResponse` | 报告路由过期 |
+| `GetRouteTable` | `GetRouteTableRequest` | `GetRouteTableResponse` | Get full route table |
+| `GetRouteForKey` | `GetRouteForKeyRequest` | `GetRouteForKeyResponse` | Get route for key |
+| `GetRoutesForRange` | `GetRoutesForRangeRequest` | `GetRoutesForRangeResponse` | Get routes for range |
+| `ReportStaleRoute` | `ReportStaleRouteRequest` | `ReportStaleRouteResponse` | Report stale route |
 
 #### Cluster Info
 
 | Method | Request | Response | Description |
 |--------|---------|----------|-------------|
-| `GetClusterHealth` | `GetClusterHealthRequest` | `GetClusterHealthResponse` | 集群健康状态 |
-| `GetClusterStats` | `GetClusterStatsRequest` | `GetClusterStatsResponse` | 集群统计信息 |
+| `GetClusterHealth` | `GetClusterHealthRequest` | `GetClusterHealthResponse` | Cluster health status |
+| `GetClusterStats` | `GetClusterStatsRequest` | `GetClusterStatsResponse` | Cluster statistics |
 
-### 1.3 AdminService (CLI → Master)
+### 1.3 AdminService (CLI to Master)
 
 **Package**: `minisql.master.AdminService`
 
 | Method | Request | Response | Description |
 |--------|---------|----------|-------------|
-| `ListServers` | `ListServersRequest` | `ListServersResponse` | 获取RegionServer列表 |
-| `TriggerBalance` | `TriggerBalanceRequest` | `TriggerBalanceResponse` | 触发手动负载均衡 |
+| `ListServers` | `ListServersRequest` | `ListServersResponse` | List RegionServers |
+| `TriggerBalance` | `TriggerBalanceRequest` | `TriggerBalanceResponse` | Trigger load balancing |
 
-### 1.4 RegionServerService (RegionServer ↔ Client)
+### 1.4 RegionServerService (RegionServer to Client)
 
 **Package**: `minisql.regionserver.RegionServerService`
 
@@ -74,40 +74,40 @@ gRPC interfaces are defined using Protocol Buffers (proto3) in `minisql-common/s
 
 | Method | Request | Response | Description |
 |--------|---------|----------|-------------|
-| `Put` | `PutRequest` | `PutResponse` | 插入/更新单行 |
-| `Get` | `GetRequest` | `GetResponse` | 查询单行 |
-| `Delete` | `DeleteRequest` | `DeleteResponse` | 删除单行 |
-| `Exists` | `ExistsRequest` | `ExistsResponse` | 检查行是否存在 |
+| `Put` | `PutRequest` | `PutResponse` | Insert/update single row |
+| `Get` | `GetRequest` | `GetResponse` | Get single row |
+| `Delete` | `DeleteRequest` | `DeleteResponse` | Delete single row |
+| `Exists` | `ExistsRequest` | `ExistsResponse` | Check row existence |
 
 #### Batch Operations
 
 | Method | Request | Response | Description |
 |--------|---------|----------|-------------|
-| `BatchPut` | `BatchPutRequest` | `BatchPutResponse` | 批量插入 |
-| `BatchGet` | `BatchGetRequest` | `BatchGetResponse` | 批量查询 |
-| `BatchDelete` | `BatchDeleteRequest` | `BatchDeleteResponse` | 批量删除 |
+| `BatchPut` | `BatchPutRequest` | `BatchPutResponse` | Batch insert |
+| `BatchGet` | `BatchGetRequest` | `BatchGetResponse` | Batch get |
+| `BatchDelete` | `BatchDeleteRequest` | `BatchDeleteResponse` | Batch delete |
 
-#### Scan & Query
+#### Scan and Query
 
 | Method | Request | Response | Description |
 |--------|---------|----------|-------------|
-| `Scan` | `ScanRequest` | `ScanResponse` (stream) | 范围扫描 |
-| `Query` | `QueryRequest` | `QueryResponse` | 高级查询 |
+| `Scan` | `ScanRequest` | `ScanResponse` (stream) | Range scan |
+| `Query` | `QueryRequest` | `QueryResponse` | Advanced query |
 
 #### Region Management
 
 | Method | Request | Response | Description |
 |--------|---------|----------|-------------|
-| `OpenRegion` | `OpenRegionRequest` | `OpenRegionResponse` | 打开Region |
-| `CloseRegion` | `CloseRegionRequest` | `CloseRegionResponse` | 关闭Region |
-| `MigrateRegion` | `MigrateRegionRequest` | `MigrateRegionResponse` | 迁移Region |
+| `OpenRegion` | `OpenRegionRequest` | `OpenRegionResponse` | Open region |
+| `CloseRegion` | `CloseRegionRequest` | `CloseRegionResponse` | Close region |
+| `MigrateRegion` | `MigrateRegionRequest` | `MigrateRegionResponse` | Migrate region |
 
 #### Replication
 
 | Method | Request | Response | Description |
 |--------|---------|----------|-------------|
-| `GetReplicationLog` | `GetReplicationLogRequest` | `GetReplicationLogResponse` (stream) | 获取WAL日志 |
-| `ApplyReplicationLog` | `ApplyReplicationLogRequest` | `ApplyReplicationLogResponse` | 应用WAL日志 |
+| `GetReplicationLog` | `GetReplicationLogRequest` | `ReplicationLogEntry` (stream) | Get WAL logs |
+| `ApplyReplicationLog` | `ApplyReplicationLogRequest` | `ApplyReplicationLogResponse` | Apply WAL logs |
 
 ---
 
@@ -119,7 +119,8 @@ The `minisql-admin` CLI tool connects to the Master node via gRPC and provides c
 
 **Module**: `minisql-admin`
 **Main Class**: `com.minisql.admin.MiniSqlAdmin`
-**Build**: `mvn clean package -pl minisql-admin -am -DskipTests`
+**Build**: `cd minisql-admin && mvn package -DskipTests`
+**Output**: `target/minisql-admin-*-jar-with-dependencies.jar`
 
 ### 2.2 Global Options
 
@@ -375,7 +376,7 @@ region_count: int32
 total_size_bytes: int64
 last_heartbeat_time: int64
 uptime_ms: int64
-address: string
+address: string         # host:port format
 ```
 
 **`ListServersResponse`**
@@ -418,7 +419,70 @@ total_qps: int64
 
 ## 5. Java Client API
 
-### 5.1 AdminGrpcClient
+### 5.1 MiniSQLClient
+
+**Package**: `com.minisql.client`
+
+**Factory Method**:
+```java
+public static MiniSQLClient connect(String masterAddress)
+```
+
+**Constructors**:
+```java
+// With ConnectionManager
+public MiniSQLClient(ManagedChannel masterChannel, ConnectionManager connectionManager)
+
+// With ConnectionManager and custom ExecutorService
+public MiniSQLClient(ManagedChannel masterChannel, ConnectionManager connectionManager,
+                     ExecutorService scanExecutor)
+```
+
+**Methods**:
+
+| Method | gRPC Call | Return Type | Description |
+|--------|-----------|-------------|-------------|
+| `put(table, key, columns)` | RegionServerService.Put | `PutResult` | Insert/update a row |
+| `get(table, key, columns)` | RegionServerService.Get | `GetResult` | Get a row by key |
+| `delete(table, key)` | RegionServerService.Delete | `DeleteResult` | Delete a row |
+| `exists(table, key)` | RegionServerService.Exists | `boolean` | Check if key exists |
+| `scan(table, startKey, endKey, limit, columns)` | RegionServerService.Scan | `List<ScanRow>` | Range scan |
+| `close()` | - | - | Shutdown and release resources |
+
+**Result Types**:
+
+```java
+public static final class PutResult {
+    boolean isSuccess();
+    long getSequenceId();
+    ErrorCode getErrorCode();
+    String getErrorMessage();
+}
+
+public static final class GetResult {
+    boolean isFound();
+    Map<String, ByteString> getColumns();
+    long getTimestamp();
+    ErrorCode getErrorCode();
+    String getErrorMessage();
+}
+
+public static final class DeleteResult {
+    boolean isSuccess();
+    boolean didExist();
+    long getSequenceId();
+    ErrorCode getErrorCode();
+    String getErrorMessage();
+}
+
+public static final class ScanRow {
+    ByteString getKey();
+    Map<String, ByteString> getColumns();
+    long getTimestamp();
+}
+```
+
+### 5.2 AdminGrpcClient
 
 **Package**: `com.minisql.admin`
 
@@ -440,15 +504,34 @@ public AdminGrpcClient(String host, int port)
 | `printTableRoute(tableName)` | `ClientMasterService.GetRouteTable` | Print table route info |
 | `shutdown()` | - | Shutdown gRPC channel |
 
-### 5.2 Usage Example
+### 5.3 Usage Example
 
 ```java
-AdminGrpcClient client = new AdminGrpcClient("localhost", 8000);
+// Client SDK example
+MiniSQLClient client = MiniSQLClient.connect("localhost:8000");
 try {
-    client.printClusterHealth();
-    client.printServerList();
-    client.printTableList();
+    // Write data
+    Map<String, ByteString> columns = new HashMap<>();
+    columns.put("name", ByteString.copyFromUtf8("alice"));
+    MiniSQLClient.PutResult result = client.put("users",
+        ByteString.copyFromUtf8("key1"), columns);
+
+    // Read data
+    MiniSQLClient.GetResult data = client.get("users",
+        ByteString.copyFromUtf8("key1"), null);
 } finally {
-    client.shutdown();
+    client.close();
+}
+```
+
+```java
+// Admin CLI example
+AdminGrpcClient admin = new AdminGrpcClient("localhost", 8000);
+try {
+    admin.printClusterHealth();
+    admin.printServerList();
+    admin.printTableList();
+} finally {
+    admin.shutdown();
 }
 ```

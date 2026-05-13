@@ -111,6 +111,17 @@ public class RegionServerMain {
         }
     }
 
+    private void ensureDefaultRegion(String table) {
+        if (!service.getActiveRegionIds().contains("region-001")) {
+            logger.info("Auto-opening default region region-001 for table: {}", table);
+            service.openRegion(RegionInfo.newBuilder()
+                    .setTableName(table)
+                    .setRegionId("region-001")
+                    .setPrimaryServer(assignedServerId)
+                    .build());
+        }
+    }
+
     public void runCommandLine() {
         BufferedReader reader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
 
@@ -178,6 +189,7 @@ public class RegionServerMain {
 
         String table = parts[1];
         String key = parts[2];
+        ensureDefaultRegion(table);
         Map<String, byte[]> columns = new HashMap<>();
         for (int i = 3; i < parts.length; i++) {
             String[] kv = parts[i].split("=", 2);
@@ -196,6 +208,7 @@ public class RegionServerMain {
             return;
         }
 
+        ensureDefaultRegion(parts[1]);
         Map<String, byte[]> result = service.get(parts[1], "region-001", parts[2]);
         if (result == null) {
             System.out.println("Key not found");
@@ -214,6 +227,7 @@ public class RegionServerMain {
             return;
         }
 
+        ensureDefaultRegion(parts[1]);
         boolean existed = service.delete(parts[1], "region-001", parts[2]);
         System.out.println(existed ? "DELETE successful (key existed)" : "DELETE: key not found");
     }
@@ -224,6 +238,7 @@ public class RegionServerMain {
             return;
         }
 
+        ensureDefaultRegion(parts[1]);
         boolean exists = service.exists(parts[1], "region-001", parts[2]);
         System.out.println(exists ? "Key exists" : "Key not found");
     }
@@ -233,6 +248,7 @@ public class RegionServerMain {
             System.out.println("Usage: list <table> [limit]");
             return;
         }
+        ensureDefaultRegion(parts[1]);
         int limit = parts.length == 3 ? parsePort(parts[2], 20) : 20;
         for (RegionDataStore.StoredRowRecord row : service.listRows("region-001", limit)) {
             System.out.print(new String(row.getKey(), StandardCharsets.UTF_8));

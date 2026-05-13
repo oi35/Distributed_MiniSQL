@@ -44,12 +44,33 @@ public class ClientMasterServiceImpl extends ClientMasterServiceGrpc.ClientMaste
 
             boolean success = metadataManager.createTable(tableName, request.getSchema(), partitionKey);
 
+            if (success) {
+                // 自动创建默认Region（覆盖所有键范围），确保路由表可查询
+                String regionId = tableName + "-region-0";
+                boolean regionCreated = metadataManager.createRegion(regionId, tableName, "", "");
+
+                if (regionCreated) {
+                    // 将Region分配到最低负载的在线服务器
+                    ServerInfo leastLoaded = clusterManager.selectLeastLoadedServer();
+                    if (leastLoaded != null) {
+                        metadataManager.setRegionPrimary(regionId, leastLoaded.getServerId());
+                        logger.info("Default region {} created for table {}, assigned to {}",
+                                regionId, tableName, leastLoaded.getServerId());
+                    } else {
+                        logger.warn("No online server available to assign default region {}", regionId);
+                    }
+                } else {
+                    logger.warn("Failed to create default region {} for table {}", regionId, tableName);
+                }
+
+                logger.info("Table created successfully: {}", tableName);
+            }
+
             CreateTableResponse.Builder responseBuilder = CreateTableResponse.newBuilder()
                     .setSuccess(success);
 
             if (success) {
                 responseBuilder.setErrorCode(ErrorCode.ERROR_OK);
-                logger.info("Table created successfully: {}", tableName);
             } else {
                 responseBuilder
                         .setErrorCode(ErrorCode.ERROR_TABLE_ALREADY_EXISTS)
@@ -218,15 +239,15 @@ public class ClientMasterServiceImpl extends ClientMasterServiceGrpc.ClientMaste
                     .setUpdateTime(table.getUpdateTime());
 
             for (RegionMetadata region : regions) {
-                RouteEntry routeEntry = RouteEntry.newBuilder()
+                RouteEntry.Builder routeBuilder = RouteEntry.newBuilder()
                         .setRegionId(region.getRegionId())
                         .setStartKey(ByteString.copyFromUtf8(region.getStartKey()))
                         .setEndKey(ByteString.copyFromUtf8(region.getEndKey()))
                         .setPrimaryServer(region.getPrimaryServer() != null ? region.getPrimaryServer() : "")
-                        .addAllReplicaServers(region.getReplicas())
-                        .build();
+                        .addAllReplicaServers(region.getReplicas());
+                resolveAddress(routeBuilder, region.getPrimaryServer());
 
-                routeTableBuilder.addRoutes(routeEntry);
+                routeTableBuilder.addRoutes(routeBuilder.build());
             }
 
             GetRouteTableResponse response = GetRouteTableResponse.newBuilder()
@@ -268,18 +289,18 @@ public class ClientMasterServiceImpl extends ClientMasterServiceGrpc.ClientMaste
             GetRouteForKeyResponse.Builder responseBuilder = GetRouteForKeyResponse.newBuilder();
 
             if (region != null) {
-                RouteEntry routeEntry = RouteEntry.newBuilder()
+                RouteEntry.Builder routeBuilder = RouteEntry.newBuilder()
                         .setRegionId(region.getRegionId())
                         .setStartKey(ByteString.copyFromUtf8(region.getStartKey()))
                         .setEndKey(ByteString.copyFromUtf8(region.getEndKey()))
                         .setPrimaryServer(region.getPrimaryServer() != null ? region.getPrimaryServer() : "")
-                        .addAllReplicaServers(region.getReplicas())
-                        .build();
+                        .addAllReplicaServers(region.getReplicas());
+                resolveAddress(routeBuilder, region.getPrimaryServer());
 
                 responseBuilder
                         .setSuccess(true)
                         .setErrorCode(ErrorCode.ERROR_OK)
-                        .setRoute(routeEntry);
+                        .setRoute(routeBuilder.build());
             } else {
                 responseBuilder
                         .setSuccess(false)
@@ -322,15 +343,15 @@ public class ClientMasterServiceImpl extends ClientMasterServiceGrpc.ClientMaste
                     .setErrorCode(ErrorCode.ERROR_OK);
 
             for (RegionMetadata region : regions) {
-                RouteEntry routeEntry = RouteEntry.newBuilder()
+                RouteEntry.Builder routeBuilder = RouteEntry.newBuilder()
                         .setRegionId(region.getRegionId())
                         .setStartKey(ByteString.copyFromUtf8(region.getStartKey()))
                         .setEndKey(ByteString.copyFromUtf8(region.getEndKey()))
                         .setPrimaryServer(region.getPrimaryServer() != null ? region.getPrimaryServer() : "")
-                        .addAllReplicaServers(region.getReplicas())
-                        .build();
+                        .addAllReplicaServers(region.getReplicas());
+                resolveAddress(routeBuilder, region.getPrimaryServer());
 
-                responseBuilder.addRoutes(routeEntry);
+                responseBuilder.addRoutes(routeBuilder.build());
             }
 
             responseObserver.onNext(responseBuilder.build());
@@ -451,6 +472,19 @@ public class ClientMasterServiceImpl extends ClientMasterServiceGrpc.ClientMaste
             logger.error("Failed to get cluster stats", e);
             responseObserver.onNext(GetClusterStatsResponse.newBuilder().build());
             responseObserver.onCompleted();
+        }
+    }
+
+    /**
+     * Resolve and set the primary_address on a RouteEntry from the server ID.
+     */
+    private void resolveAddress(RouteEntry.Builder builder, String serverId) {
+        if (serverId == null || serverId.isEmpty()) {
+            return;
+        }
+        ServerInfo info = clusterManager.getServerInfo(serverId);
+        if (info != null && info.getHost() != null && !info.getHost().isEmpty()) {
+            builder.setPrimaryAddress(info.getHost() + ":" + info.getPort());
         }
     }
 }

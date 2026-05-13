@@ -18,7 +18,28 @@
       "Bash(docker --version)",
       "Bash(sed -i 's/rs1\\\\.start\\(8300\\);$/rs1.start\\(8300\\);\\\\n        rs1.register\\(\"localhost\", 9201\\);/' FailureRecoveryIntegrationTest.java)",
       "Bash(sed -i 's/rs2\\\\.start\\(8300\\);$/rs2.start\\(8300\\);\\\\n        rs2.register\\(\"localhost\", 9202\\);/' FailureRecoveryIntegrationTest.java)",
-      "Bash(sed -i 's/rs\\\\.start\\(8300\\);$/rs.start\\(8300\\);\\\\n        rs.register\\(\"localhost\", 9203\\);/' FailureRecoveryIntegrationTest.java)"
+      "Bash(sed -i 's/rs\\\\.start\\(8300\\);$/rs.start\\(8300\\);\\\\n        rs.register\\(\"localhost\", 9203\\);/' FailureRecoveryIntegrationTest.java)",
+      "Bash(java -jar minisql-master/target/minisql-master-*-jar-with-dependencies.jar --help)",
+      "Bash(java -jar minisql-admin/target/minisql-admin-*-jar-with-dependencies.jar --help)",
+      "Bash(java *)",
+      "Bash(java -cp '../bootstrap;__TRACKED_VAR__' ZkStart 2181)",
+      "Bash(echo \"ZK PID: $!\")",
+      "Bash(MASTER_PORT=8000 MASTER_ID=master-01 ZK_CONNECT=localhost:2181 mvn exec:java -Dexec.mainClass=\"com.minisql.master.MasterServer\" -q)",
+      "Bash(echo \"Master PID: $!\")",
+      "Bash(REGIONSERVER_ID=rs-001 REGIONSERVER_PORT=8001 nohup java -jar target/minisql-regionserver-1.0-SNAPSHOT-jar-with-dependencies.jar rs-001 8001)",
+      "Bash(echo \"RS PID: $!\")",
+      "Bash(taskkill /F /PID 2471)",
+      "Bash(taskkill /F /PID 1592)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill //F //PID 4871)",
+      "Bash(taskkill //F //PID 122508)",
+      "Bash(taskkill //F //PID 101532)",
+      "Bash(taskkill //F //PID 120040)",
+      "Bash(taskkill //F //PID 5652)",
+      "Bash(mvn dependency:build-classpath -DincludeScope=test -Dmdep.outputFile=/dev/stdout -q)",
+      "Bash(javac -cp \"D:/Code/apache-maven-3.9.12/repo/org/apache/curator/curator-test/5.5.0/curator-test-5.5.0.jar;D:/Code/apache-maven-3.9.12/repo/org/apache/zookeeper/zookeeper/3.9.1/zookeeper-3.9.1.jar;D:/Code/apache-maven-3.9.12/repo/org/apache/curator/curator-framework/5.5.0/curator-framework-5.5.0.jar;D:/Code/apache-maven-3.9.12/repo/org/apache/curator/curator-client/5.5.0/curator-client-5.5.0.jar;D:/Code/apache-maven-3.9.12/repo/org/slf4j/slf4j-api/2.0.9/slf4j-api-2.0.9.jar;D:/Code/apache-maven-3.9.12/repo/com/google/guava/guava/32.1.3-jre/guava-32.1.3-jre.jar;D:/Code/apache-maven-3.9.12/repo/org/apache/zookeeper/zookeeper-jute/3.9.1/zookeeper-jute-3.9.1.jar\" ZkStart.java)",
+      "Bash(tasklist *)",
+      "Bash(taskkill *)"
     ]
   }
 }
