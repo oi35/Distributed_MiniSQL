@@ -6,14 +6,15 @@ RegionServer 是分布式 MiniSQL 系统的核心组件之一，负责数据存�
 
 - **数据操作**: 支持 Put/Get/Delete/Exists 等基础 CRUD 操作 ✅
 - **命令行界面**: 提供交互式命令行进行数据操作测试 ✅
-- **内存存储**: 目前使用内存 HashMap 存储数据，支持快速开发测试 ✅
+- **内存存储**: 基于 TreeMap 的内存存储引擎，支持范围扫描 ✅
+- **MySQL 存储**: HikariCP 连接池 + MySQL 持久化存储 ✅
 - **可执行 JAR**: 支持打包为独立运行的 JAR 文件 ✅
 - **日志记录**: 使用 SLF4J + Logback 进行结构化日志记录 ✅
 - **配置管理**: 支持环境变量和配置文件 ✅
-- **批量操作**: 支持批量数据操作（开发中）
-- **范围扫描**: 支持流式范围查询（开发中）
-- **Region 管理**: Region 打开/关闭/迁移（开发中）
-- **副本同步**: WAL 日志同步（开发中）
+- **批量操作**: 支持 BatchPut/BatchGet/BatchDelete ✅
+- **范围扫描**: 支持流式范围查询（正向/反向）✅
+- **Region 管理**: Region 打开/关闭/迁移 ✅
+- **副本同步**: WAL 日志同步 + Paxos 共识协议 ✅
 
 ## 快速开始
 
@@ -182,30 +183,42 @@ GetRequest request = GetRequest.newBuilder()
 
 ## 开发计划
 
-### Phase 1: 基础功能 (当前)
+### Phase 1: 基础功能 ✅
 - [x] 项目结构搭建
 - [x] gRPC 服务框架
 - [x] 基础 CRUD 操作
 - [x] 内存存储实现
 - [x] 单元测试
 
-### Phase 2: 存储层
-- [ ] MySQL 集成
-- [ ] 连接池配置
-- [ ] Schema 管理
+### Phase 2: 存储层 ✅
+- [x] MySQL 集成（HikariCP 连接池）
+- [x] 连接池配置
+- [x] Schema 管理（按 Region 建表）
 - [ ] 索引优化
 
-### Phase 3: Region 管理
-- [ ] Region 生命周期
+### Phase 3: Region 管理 ✅
+- [x] Region 生命周期（openRegion/closeRegion）
 - [ ] Region 分裂逻辑
-- [ ] Region 迁移
-- [ ] 负载均衡
+- [x] Region 迁移（migrateRegion）
+- [ ] 负载均衡（由 Master 模块负责）
 
-### Phase 4: 高级功能
-- [ ] 批量操作
-- [ ] 范围扫描
-- [ ] 副本同步
-- [ ] WAL 日志
+### Phase 4: 副本管理与一致性协议
+- [x] 批量操作（BatchPut/BatchGet/BatchDelete）
+- [x] 范围扫描（流式正向/反向）
+- [x] ReplicationManager — 副本列表管理、水印追踪
+- [x] ReplicationLogService — 副本日志拉取与应用（含checksum校验）
+- [x] 异步副本同步 — WAL 推送 + 批量复制
+- [x] 副本故障检测 — 连续失败计数 + 阈值判定
+- [x] 副本恢复 — 增量WAL追赶
+- [x] Paxos 协议 — Prepare-Accept-Commit 三阶段
+- [x] Paxos Acceptor — 提案承诺/接受/提交 + per-region 并发控制
+- [x] Paxos Proposer — 多数派确认 + 指数退避重试
+- [x] WAL 日志系统（WalManager + WalService）
+- [x] WAL 日志轮转（64MB阈值）+ 归档清理
+- [x] WAL 故障恢复重放（启动时自动重建索引并回放）
+- [x] 数据校验和（MD5 checksum）
+- [ ] 主副本切换（Leader选举 + 角色切换）
+- [ ] RegionServer 向 Master 的注册与心跳集成
 
 ## 测试
 

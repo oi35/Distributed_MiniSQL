@@ -1,0 +1,493 @@
+package com.minisql.regionserver.replication;
+
+import com.minisql.regionserver.wal.WalManager;
+import com.minisql.regionserver.wal.WalRecord;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.Closeable;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+/**
+ * 增强版WAL服务 —— 为副本同步提供高效日志管理。
+ *
+ * 核心能力：
+ * 1. 自动生成单调递增的序列号
+ * 2. 维护内存索引：序列号 → 日志记录，支持快速范围查询
+ * 3. 按 Region 分组索引，支持副本同步时按 region 拉取增量日志
+ * 4. 日志轮转：当单个WAL文件超过大小阈值时自动创建新文件
+ * 5. 计算每条日志的 MD5 校验和，用于副本数据一致性验证
+ */
+public class WalService implements Closeable {
+
+    private static final Logger logger = LoggerFactory.getLogger(WalService.class);
+
+    // 默认单个WAL文件最大大小：64MB
+    private static final long DEFAULT_MAX_FILE_SIZE = 64 * 1024 * 1024L;
+    // 默认保留的归档WAL文件数（超出部分将被清理）
+    private static final int DEFAULT_MAX_ARCHIVED_FILES = 5;
+
+    private final String regionServerId;
+    private final Path walDirectory;
+    private final long maxFileSizeBytes;
+    private final int maxArchivedFiles;
+
+    // 当前活跃的 WalManager（写入目标）
+    private volatile WalManager currentWalManager;
+    // 历史 WalManager 列表（CopyOnWriteArrayList 线程安全，读多写少）
+    private final List<WalManager> archivedWalManagers;
+
+    // 全局序列号生成器（单调递增）
+    private final AtomicLong sequenceGenerator;
+
+    // 内存索引：sequenceId → WalRecord（保留最近N条记录以加速查询）
+    private final TreeMap<Long, WalRecord> memoryIndex;
+    // 每个 region 的序列号列表：regionId → 该 region 的所有序列号
+    private final Map<String, TreeSet<Long>> regionIndex;
+
+    // 保护索引的读写锁
+    private final ReadWriteLock indexLock;
+    // 内存中最多保留的记录数
+    private static final int MAX_IN_MEMORY_RECORDS = 10000;
+
+    // 保护文件轮转操作的锁
+    private final Object rotationLock = new Object();
+    // 文件轮转计数器
+    private int walFileCounter;
+
+    public WalService(String walDirectory, String regionServerId) {
+        this(walDirectory, regionServerId, DEFAULT_MAX_FILE_SIZE);
+    }
+
+    public WalService(String walDirectory, String regionServerId, long maxFileSizeBytes) {
+        this(walDirectory, regionServerId, maxFileSizeBytes, DEFAULT_MAX_ARCHIVED_FILES);
+    }
+
+    /**
+     * @param walDirectory     WAL 文件存储目录
+     * @param regionServerId   RegionServer 唯一标识
+     * @param maxFileSizeBytes 单个文件最大字节数
+     * @param maxArchivedFiles 最多保留的归档文件数（超出部分自动清理）
+     */
+    public WalService(String walDirectory, String regionServerId, long maxFileSizeBytes,
+                      int maxArchivedFiles) {
+        this.regionServerId = regionServerId;
+        this.walDirectory = Paths.get(walDirectory);
+        this.maxFileSizeBytes = maxFileSizeBytes;
+        this.maxArchivedFiles = maxArchivedFiles;
+        this.archivedWalManagers = new CopyOnWriteArrayList<>();
+        this.sequenceGenerator = new AtomicLong(0);
+        this.memoryIndex = new TreeMap<>();
+        this.regionIndex = new ConcurrentHashMap<>();
+        this.indexLock = new ReentrantReadWriteLock();
+        this.walFileCounter = 0;
+
+        try {
+            Files.createDirectories(this.walDirectory);
+        } catch (IOException e) {
+            throw new IllegalStateException("无法创建WAL目录: " + walDirectory, e);
+        }
+
+        // 1. 先从已有文件中恢复索引（含序列号、计数器等状态）
+        loadExistingFiles();
+        // 2. 创建新的 WAL 文件（计数器已从已有文件中推导）
+        rotateWalFile();
+        // 3. 清理超出保留数的旧归档文件
+        cleanupOldArchivedFiles();
+        logger.info("WalService 初始化完成: regionServer={}, 当前序列号={}",
+                regionServerId, sequenceGenerator.get());
+    }
+
+    /**
+     * 追加一条日志记录到WAL，返回包含序列号的完整日志记录。
+     *
+     * @param regionId  Region ID
+     * @param tableName 表名
+     * @param operation 操作类型（PUT / DELETE）
+     * @param key       行键
+     * @param columns   列数据
+     * @return 完整的 WalRecord（含分配的序列号和校验和）
+     */
+    public WalRecord append(String regionId, String tableName, String operation,
+                            byte[] key, Map<String, byte[]> columns) {
+        long seq = sequenceGenerator.incrementAndGet();
+        long timestamp = System.currentTimeMillis();
+        byte[] checksum = computeChecksum(seq, regionId, operation, key, columns);
+
+        WalRecord record = new WalRecord(seq, regionId, tableName, timestamp,
+                operation, key, columns, checksum);
+
+        // 1. 先写入磁盘（WAL原则：先写日志，再更新索引）
+        currentWalManager.append(record);
+
+        // 2. 更新内存索引
+        indexLock.writeLock().lock();
+        try {
+            memoryIndex.put(seq, record);
+            regionIndex.computeIfAbsent(regionId, k -> new TreeSet<>()).add(seq);
+
+            // 内存索引超限时清理最旧的记录
+            while (memoryIndex.size() > MAX_IN_MEMORY_RECORDS) {
+                Long oldestSeq = memoryIndex.firstKey();
+                WalRecord oldest = memoryIndex.remove(oldestSeq);
+                if (oldest != null) {
+                    TreeSet<Long> regionSeqs = regionIndex.get(oldest.getRegionId());
+                    if (regionSeqs != null) {
+                        regionSeqs.remove(oldestSeq);
+                    }
+                }
+            }
+        } finally {
+            indexLock.writeLock().unlock();
+        }
+
+        // 3. 检查是否需要轮转文件
+        checkRotation();
+
+        logger.debug("WAL追加: seq={}, region={}, op={}", seq, regionId, operation);
+        return record;
+    }
+
+    /**
+     * 按序列号范围获取日志记录（用于副本同步）。
+     *
+     * @param regionId      Region ID，为 null 表示不过滤 region
+     * @param startSequence 起始序列号（包含），<=0 表示从第一条开始
+     * @param endSequence   结束序列号（包含），<=0 表示到最新一条
+     * @return 符合范围的日志记录列表（按序列号升序排列）
+     */
+    public List<WalRecord> getRecords(String regionId, long startSequence, long endSequence) {
+        long start = startSequence <= 0 ? 1 : startSequence;
+        long end = endSequence <= 0 ? sequenceGenerator.get() : endSequence;
+
+        List<WalRecord> results = new ArrayList<>();
+
+        indexLock.readLock().lock();
+        try {
+            // 先收集相关的序列号
+            Collection<Long> candidateSeqs;
+            if (regionId != null && !regionId.isEmpty()) {
+                TreeSet<Long> regionSeqs = regionIndex.get(regionId);
+                if (regionSeqs == null) {
+                    return results;
+                }
+                candidateSeqs = regionSeqs.subSet(start, true, end, true);
+            } else {
+                candidateSeqs = memoryIndex.subMap(start, true, end, true).keySet();
+            }
+
+            // 从内存索引中读取记录
+            for (Long seq : candidateSeqs) {
+                WalRecord record = memoryIndex.get(seq);
+                if (record != null) {
+                    results.add(record);
+                }
+            }
+        } finally {
+            indexLock.readLock().unlock();
+        }
+
+        // 如果内存索引中没找到足够的记录，从磁盘文件中读取
+        if (results.isEmpty() && start <= sequenceGenerator.get()) {
+            results.addAll(loadFromDisk(regionId, start, end));
+        }
+
+        return results;
+    }
+
+    /**
+     * 获取指定 Region 的最新序列号。
+     */
+    public long getLatestSequenceId(String regionId) {
+        indexLock.readLock().lock();
+        try {
+            TreeSet<Long> regionSeqs = regionIndex.get(regionId);
+            if (regionSeqs != null && !regionSeqs.isEmpty()) {
+                return regionSeqs.last();
+            }
+        } finally {
+            indexLock.readLock().unlock();
+        }
+        return 0;
+    }
+
+    /**
+     * 获取全局最新序列号。
+     */
+    public long getGlobalLatestSequenceId() {
+        return sequenceGenerator.get();
+    }
+
+    /**
+     * 加载所有日志记录（用于故障恢复时的完整回放）。
+     */
+    public List<WalRecord> loadAll() {
+        List<WalRecord> allRecords = new ArrayList<>();
+
+        // 先读取历史归档文件
+        for (WalManager archived : archivedWalManagers) {
+            allRecords.addAll(archived.loadAll());
+        }
+        // 再读取当前活跃文件
+        if (currentWalManager != null) {
+            allRecords.addAll(currentWalManager.loadAll());
+        }
+
+        return allRecords;
+    }
+
+    /**
+     * 生成数据校验和（MD5），用于副本间数据一致性校验。
+     */
+    private byte[] computeChecksum(long seq, String regionId, String operation,
+                                   byte[] key, Map<String, byte[]> columns) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            md.update(Long.toString(seq).getBytes());
+            md.update(regionId.getBytes());
+            md.update(operation.getBytes());
+            md.update(key);
+            for (Map.Entry<String, byte[]> entry : columns.entrySet()) {
+                md.update(entry.getKey().getBytes());
+                md.update(entry.getValue());
+            }
+            return md.digest();
+        } catch (NoSuchAlgorithmException e) {
+            // MD5 是所有 JVM 的必需算法，正常情况不会抛出此异常
+            throw new IllegalStateException("MD5算法不可用", e);
+        }
+    }
+
+    /**
+     * 从磁盘文件中加载指定范围的日志记录（当内存索引不命中时使用）。
+     */
+    private List<WalRecord> loadFromDisk(String regionId, long startSequence, long endSequence) {
+        List<WalRecord> results = new ArrayList<>();
+
+        // 遍历所有WAL文件（包括归档和当前）
+        List<WalManager> allManagers = new ArrayList<>(archivedWalManagers);
+        if (currentWalManager != null) {
+            allManagers.add(currentWalManager);
+        }
+
+        for (WalManager manager : allManagers) {
+            for (WalRecord record : manager.loadAll()) {
+                if (record.getSequenceId() >= startSequence
+                        && record.getSequenceId() <= endSequence) {
+                    if (regionId == null || regionId.isEmpty()
+                            || regionId.equals(record.getRegionId())) {
+                        results.add(record);
+                    }
+                }
+            }
+        }
+
+        return results;
+    }
+
+    /**
+     * 检查当前WAL文件是否超过大小阈值，超过则轮转。
+     */
+    private void checkRotation() {
+        Path currentFile = currentWalManager.getWalFile();
+        try {
+            if (Files.exists(currentFile) && Files.size(currentFile) >= maxFileSizeBytes) {
+                logger.info("WAL文件大小超过阈值({}MB)，触发轮转",
+                        maxFileSizeBytes / (1024 * 1024));
+                rotateWalFile();
+            }
+        } catch (IOException e) {
+            logger.warn("检查WAL文件大小时出错", e);
+        }
+    }
+
+    /**
+     * 轮转WAL文件：归档当前文件，创建新文件。
+     * 由 rotationLock 保护，确保并发 append 不会同时触发多次轮转。
+     * 内部重新检查文件大小，避免重复轮转。
+     */
+    private void rotateWalFile() {
+        synchronized (rotationLock) {
+            // Double-check: another thread may have already rotated
+            if (currentWalManager != null) {
+                Path currentFile = currentWalManager.getWalFile();
+                try {
+                    if (Files.exists(currentFile) && Files.size(currentFile) < maxFileSizeBytes) {
+                        return; // File is not yet full — another thread already rotated
+                    }
+                } catch (IOException e) {
+                    logger.warn("检查WAL文件大小时出错", e);
+                }
+
+                archivedWalManagers.add(currentWalManager);
+                logger.info("归档WAL文件: {}", currentWalManager.getWalFile());
+            }
+
+            walFileCounter++;
+            String walFileName = String.format("%s-%03d", regionServerId, walFileCounter);
+            currentWalManager = new WalManager(walDirectory, walFileName);
+
+            logger.info("创建新WAL文件: {}", currentWalManager.getWalFile());
+        }
+
+        // 清理超出保留数的旧归档文件
+        cleanupOldArchivedFiles();
+    }
+
+    /**
+     * 清理超出最大保留数的旧归档WAL文件。
+     *
+     * 当归档文件数量超过 maxArchivedFiles 时，删除最旧的超出部分。
+     * 同时清理被删除文件对应的内存索引记录。
+     */
+    private void cleanupOldArchivedFiles() {
+        while (archivedWalManagers.size() > maxArchivedFiles) {
+            WalManager oldest = archivedWalManagers.get(0);
+            Path oldFile = oldest.getWalFile();
+
+            // 读取该文件中所有记录，用于从内存索引中清理
+            List<WalRecord> recordsInOldFile = oldest.loadAll();
+
+            // 关闭并移除旧的WalManager
+            oldest.close();
+            archivedWalManagers.remove(0);
+
+            // 删除物理文件
+            try {
+                if (Files.exists(oldFile)) {
+                    Files.delete(oldFile);
+                    logger.info("清理旧WAL文件: {} ({}条记录)", oldFile, recordsInOldFile.size());
+                }
+            } catch (IOException e) {
+                logger.warn("清理旧WAL文件失败: {}", oldFile, e);
+            }
+
+            // 仅清理属于被删除文件的记录对应的内存索引
+            if (!recordsInOldFile.isEmpty()) {
+                indexLock.writeLock().lock();
+                try {
+                    for (WalRecord record : recordsInOldFile) {
+                        long seq = record.getSequenceId();
+                        WalRecord removed = memoryIndex.remove(seq);
+                        if (removed != null) {
+                            TreeSet<Long> regionSeqs = regionIndex.get(removed.getRegionId());
+                            if (regionSeqs != null) {
+                                regionSeqs.remove(seq);
+                                if (regionSeqs.isEmpty()) {
+                                    regionIndex.remove(removed.getRegionId());
+                                }
+                            }
+                        }
+                    }
+                } finally {
+                    indexLock.writeLock().unlock();
+                }
+            }
+        }
+    }
+
+    /**
+     * 获取当前归档文件数量（用于监控和测试）。
+     */
+    public int getArchivedFileCount() {
+        return archivedWalManagers.size();
+    }
+
+    /**
+     * 从已有WAL文件重建内存索引（启动时调用）。
+     */
+    /**
+     * 扫描目录下所有已有 .wal 文件，加载数据到内存索引并恢复状态。
+     * 在构造函数中先于 rotateWalFile 调用，确保计数器从已有文件中推导。
+     */
+    private void loadExistingFiles() {
+        logger.info("开始从已有WAL文件加载数据...");
+        long maxSeq = 0;
+        int recordCount = 0;
+
+        try {
+            java.util.List<Path> walFiles = Files.list(walDirectory)
+                    .filter(p -> p.toString().endsWith(".wal"))
+                    .sorted()
+                    .collect(java.util.stream.Collectors.toList());
+
+            if (walFiles.isEmpty()) {
+                logger.info("未发现已有WAL文件，从零开始");
+                return;
+            }
+
+            // 最后一个文件视为当前活跃文件，其余为归档
+            for (int i = 0; i < walFiles.size(); i++) {
+                Path walFile = walFiles.get(i);
+                String baseName = walFile.getFileName().toString();
+                // 去掉 .wal 后缀
+                String fileNameWithoutExt = baseName.substring(0, baseName.length() - 4);
+                boolean isCurrent = (i == walFiles.size() - 1);
+
+                WalManager manager = new WalManager(walDirectory, fileNameWithoutExt);
+                if (isCurrent) {
+                    currentWalManager = manager;
+                } else {
+                    archivedWalManagers.add(manager);
+                }
+
+                // 从文件名推导计数器（格式: regionServerId-NNN）
+                int lastDash = fileNameWithoutExt.lastIndexOf('-');
+                if (lastDash >= 0) {
+                    try {
+                        int counter = Integer.parseInt(fileNameWithoutExt.substring(lastDash + 1));
+                        if (counter >= walFileCounter) {
+                            walFileCounter = counter;
+                        }
+                    } catch (NumberFormatException ignored) {
+                        // 非标准文件名，忽略
+                    }
+                }
+
+                List<WalRecord> records = manager.loadAll();
+                for (WalRecord record : records) {
+                    indexLock.writeLock().lock();
+                    try {
+                        memoryIndex.put(record.getSequenceId(), record);
+                        regionIndex.computeIfAbsent(record.getRegionId(), k -> new TreeSet<>())
+                                .add(record.getSequenceId());
+                    } finally {
+                        indexLock.writeLock().unlock();
+                    }
+                    if (record.getSequenceId() > maxSeq) {
+                        maxSeq = record.getSequenceId();
+                    }
+                    recordCount++;
+                }
+            }
+        } catch (IOException e) {
+            logger.warn("扫描WAL目录时出错", e);
+        }
+
+        sequenceGenerator.set(maxSeq);
+        logger.info("已有WAL数据加载完成: {}条记录, 最大序列号={}, 计数器={}, 归档{}个",
+                recordCount, maxSeq, walFileCounter, archivedWalManagers.size());
+    }
+
+    @Override
+    public void close() {
+        if (currentWalManager != null) {
+            currentWalManager.close();
+        }
+        for (WalManager archived : archivedWalManagers) {
+            archived.close();
+        }
+        logger.info("WalService 已关闭: regionServer={}", regionServerId);
+    }
+}

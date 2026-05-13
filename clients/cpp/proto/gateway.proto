@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package minisql.gateway;
+
+option java_multiple_files = true;
+option java_package = "com.minisql.client.gateway.proto";
+option java_outer_classname = "GatewayProto";
+
+service GatewayService {
+  rpc Execute(ExecuteRequest) returns (ExecuteResponse);
+  rpc Ping(PingRequest) returns (PingResponse);
+}
+
+message ExecuteRequest {
+  string sql = 1;
+}
+
+message ExecuteResponse {
+  bool success = 1;
+  string error_code = 2;    // maps to com.minisql.common ErrorCode name
+  string error_message = 3;
+  oneof result {
+    UpdateResult update = 10;
+    QueryResult query = 11;
+  }
+}
+
+message UpdateResult {
+  int32 affected_rows = 1;
+}
+
+message QueryResult {
+  repeated string columns = 1;
+  repeated Row rows = 2;
+}
+
+message Row {
+  // Values are positional; same length and order as QueryResult.columns.
+  repeated TypedValue values = 1;
+}
+
+message TypedValue {
+  oneof value {
+    NullValue null_value = 1;
+    int64 int_value = 2;
+    double double_value = 3;
+    string string_value = 4;
+    bool bool_value = 5;
+  }
+}
+
+enum NullValue {
+  NULL_VALUE = 0;
+}
+
+message PingRequest {}
+
+message PingResponse {
+  string version = 1;
+  int64 server_time_ms = 2;
+}

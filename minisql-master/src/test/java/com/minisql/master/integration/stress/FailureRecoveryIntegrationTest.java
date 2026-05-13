@@ -3,6 +3,7 @@ package com.minisql.master.integration.stress;
 import com.minisql.master.MasterServer;
 import com.minisql.master.balance.MigrationTask;
 import com.minisql.master.balance.MigrationState;
+import com.minisql.master.cluster.ServerInfo;
 import com.minisql.master.integration.fixtures.FakeRegionServer;
 import com.minisql.common.proto.ServerState;
 import org.junit.*;
@@ -182,7 +183,7 @@ public class FailureRecoveryIntegrationTest {
         await().atMost(25, TimeUnit.SECONDS)
                 .pollInterval(2, TimeUnit.SECONDS)
                 .until(() -> {
-                    var info = masterServer.getClusterManager().getServerInfo("rs-recovery-003");
+                    ServerInfo info = masterServer.getClusterManager().getServerInfo("rs-recovery-003");
                     return info == null || info.getState() != ServerState.SERVER_ONLINE;
                 });
 
@@ -197,7 +198,7 @@ public class FailureRecoveryIntegrationTest {
         // Wait for re-registration
         await().atMost(15, TimeUnit.SECONDS)
                 .until(() -> {
-                    var info = masterServer.getClusterManager().getServerInfo("rs-recovery-003");
+                    ServerInfo info = masterServer.getClusterManager().getServerInfo("rs-recovery-003");
                     return info != null && info.getState() == ServerState.SERVER_ONLINE;
                 });
 

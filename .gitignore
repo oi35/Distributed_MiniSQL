@@ -19,3 +19,14 @@ FINAL-SUMMARY.md
 ALL-TESTS-PASSING.md
 TEST-RESULTS.md
 E2E-STRESS-TEST-RESULTS.md
+
+# Log files
+logs/
+*.log
+
+# WAL files (runtime data, not source code)
+*.wal
+
+# Duplicate entries for status/test docs (already covered above)
+TEST-RESULTS.md
+E2E-STRESS-TEST-RESULTS.md
