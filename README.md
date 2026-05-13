@@ -4,7 +4,7 @@
 
 ## 项目概述
 
-Distributed MiniSQL 是一个企业级分布式数据库系统，采用 Master-RegionServer 架构，支持：
+Distributed MiniSQL 是一个分布式数据库系统，采用 Master-RegionServer 架构，支持：
 
 - **数据分片**：基于范围的Region分片
 - **副本管理**：使用Paxos协议保证一致性
@@ -85,37 +85,37 @@ Distributed MiniSQL 是一个企业级分布式数据库系统，采用 Master-R
 ### 模块结构
 ```
 Distributed_MiniSQL/
-├── minisql-common/          # 公共模块（protobuf定义）✅
-├── minisql-master/          # Master服务（100%完成）✅
-│   ├── cluster/            # 集群管理 ✅
-│   ├── metadata/           # 元数据管理 ✅
-│   ├── balance/            # 负载均衡 + 迁移管理 ✅
-│   ├── service/            # gRPC服务实现 ✅
-│   ├── zk/                 # Zookeeper集成 ✅
-│   └── integration/        # 集成测试（181个测试）✅
-├── minisql-regionserver/    # RegionServer服务（100%完成）✅
-│   ├── service/            # gRPC服务实现 ✅
-│   ├── db/                 # MySQL数据库集成 ✅
-│   ├── store/              # 数据存储层 ✅
-│   ├── wal/                # WAL日志系统 ✅
-│   └── replication/        # Paxos复制（53个测试）✅
-│       ├── PaxosProposer   # Paxos提议者 ✅
-│       ├── PaxosAcceptor   # Paxos接受者 ✅
-│       ├── ReplicationManager  # 复制管理器 ✅
-│       └── WalService      # WAL服务 ✅
-├── minisql-client/          # Java客户端SDK（100%完成）✅
-│   ├── sql/                # SQL层（JSqlParser）✅
-│   │   ├── SqlExecutor     # SQL执行器 ✅
-│   │   ├── JoinExecutor    # Hash Join ✅
-│   │   └── PredicateBuilder # 谓词构建 ✅
-│   ├── gateway/            # gRPC Gateway ✅
-│   ├── schema/             # Schema管理 ✅
-│   └── ParallelScanner     # 并行扫描 ✅
-├── minisql-admin/           # Admin CLI工具 ✅
+├── minisql-common/          # 公共模块（protobuf定义）
+├── minisql-master/          # Master服务
+│   ├── cluster/            # 集群管理 
+│   ├── metadata/           # 元数据管理 
+│   ├── balance/            # 负载均衡 + 迁移管理 
+│   ├── service/            # gRPC服务实现 
+│   ├── zk/                 # Zookeeper集成 
+│   └── integration/        # 集成测试
+├── minisql-regionserver/    # RegionServer服务
+│   ├── service/            # gRPC服务实现 
+│   ├── db/                 # MySQL数据库集成 
+│   ├── store/              # 数据存储层 
+│   ├── wal/                # WAL日志系统 
+│   └── replication/        # Paxos复制
+│       ├── PaxosProposer   # Paxos提议者 
+│       ├── PaxosAcceptor   # Paxos接受者 
+│       ├── ReplicationManager  # 复制管理器 
+│       └── WalService      # WAL服务 
+├── minisql-client/          # Java客户端SDK
+│   ├── sql/                # SQL层（JSqlParser）
+│   │   ├── SqlExecutor     # SQL执行器 
+│   │   ├── JoinExecutor    # Hash Join 
+│   │   └── PredicateBuilder # 谓词构建 
+│   ├── gateway/            # gRPC Gateway 
+│   ├── schema/             # Schema管理 
+│   └── ParallelScanner     # 并行扫描 
+├── minisql-admin/           # Admin CLI工具 
 ├── clients/
-│   ├── cpp/                # C++ SDK ✅
-│   └── python/             # Python SDK ✅
-└── docs/                    # 完整文档 ✅
+│   ├── cpp/                # C++ SDK 
+│   └── python/             # Python SDK 
+└── docs/                    # 完整文档 
 ```
 
 ## 快速开始
@@ -229,99 +229,7 @@ WHERE o.amount > 100;
 DELETE FROM users WHERE id = 1;
 ```
 
-## 项目状态
-
-### 🎉 所有核心模块已完成！
-
-| 模块 | 状态 | 测试通过率 | 说明 |
-|------|------|-----------|------|
-| **Master** | ✅ 100%完成 | 181/181 (100%) | 集群管理、负载均衡、迁移 |
-| **RegionServer** | ✅ 100%完成 | 53/53 (100%) | 数据存储、CRUD、WAL |
-| **Replication/Paxos** | ✅ 100%完成 | 包含在RS中 | 副本同步、共识算法 |
-| **Client SDK (Java)** | ✅ 100%完成 | 多个测试套件 | SQL、JOIN、并行扫描 |
-| **Client SDK (C++)** | ✅ 100%完成 | - | gRPC客户端 |
-| **Client SDK (Python)** | ✅ 100%完成 | pytest套件 | gRPC客户端 |
-| **gRPC Gateway** | ✅ 100%完成 | 251个测试 | 多语言支持 |
-| **Admin CLI** | ✅ 100%完成 | - | 管理工具 |
-
-**总测试数：285+ 个测试，全部通过！** 🎉
-
-### Master模块：100%完成 ✅
-
-**核心功能：**
-- ✅ ClusterManager - 集群管理、心跳监控、故障恢复
-- ✅ MetadataManager - 表/Region元数据、路由表管理
-- ✅ LoadBalancer - 负载检测、迁移计划生成、自动均衡
-- ✅ RegionMigrationManager - 迁移状态机、自动重试、统计信息
-- ✅ Zookeeper集成 - Master选举、元数据持久化
-- ✅ AdminService - CLI管理接口
-
-**测试覆盖（181个测试，100%通过）：**
-- 单元测试：172个 ✅
-- 集成测试：9个 ✅
-- **总计：181/181 通过（100%）** ✅
-
-**代码质量：**
-- Balance包覆盖率：94%（指令），89%（分支）
-- 完整的Javadoc文档
-- 线程安全设计
-- 生产级代码质量
-
-### RegionServer模块：100%完成 ✅
-
-**核心功能：**
-- ✅ RegionServerService - gRPC服务实现
-- ✅ MySQL数据库集成 - 底层存储引擎
-- ✅ WAL日志系统 - 持久化和恢复
-- ✅ Paxos复制 - 副本同步和共识
-- ✅ ReplicationManager - 复制管理
-- ✅ Region生命周期管理
-
-**测试覆盖（53个测试，100%通过）：**
-- RegionServer服务测试：7个 ✅
-- WAL测试：5个 ✅
-- Replication/Paxos测试：41个 ✅
-- **总计：53/53 通过（100%）** ✅
-
-**技术亮点：**
-- Paxos共识算法完整实现
-- WAL自动恢复
-- 多副本数据同步
-- 线程池优化（32线程）
-
-### Client SDK：100%完成 ✅
-
-**Java SDK功能：**
-- ✅ SQL支持 - INSERT/SELECT/DELETE/JOIN
-- ✅ JSqlParser集成 - 标准SQL解析
-- ✅ Hash Join执行器 - 分布式JOIN
-- ✅ 并行扫描 - 多Region并发查询
-- ✅ 过滤器下推 - 查询优化
-- ✅ ORDER BY/LIMIT - 排序和分页
-- ✅ 路由缓存 - 性能优化
-- ✅ Schema管理 - 表结构缓存
-
-**多语言支持：**
-- ✅ C++ SDK - CMake + vcpkg
-- ✅ Python SDK - gRPC + pytest
-- ✅ gRPC Gateway - 统一访问入口
-
-**测试覆盖：**
-- SqlExecutor测试：291行 ✅
-- JoinExecutor测试：282行 ✅
-- Gateway测试：251行 ✅
-- 其他测试：多个套件 ✅
-
 ## 文档
-
-### 设计文档
-
-- [整体架构设计](docs/superpowers/specs/2026-04-15-distributed-minisql-design.md)
-- [Master模块完整设计](docs/superpowers/specs/2026-04-29-master-module-complete-design.md)
-- [LoadBalancer设计](docs/superpowers/specs/2026-04-20-loadbalancer-design.md)
-- [RegionMigrationManager设计](docs/superpowers/specs/2026-04-26-regionmigrationmanager-design.md)
-- [Zookeeper集成设计](docs/superpowers/specs/2026-04-18-zookeeper-integration-design.md)
-- [集成测试设计](docs/superpowers/specs/2026-04-28-master-integration-testing-design.md)
 
 ### API文档
 
@@ -337,7 +245,6 @@ DELETE FROM users WHERE id = 1;
 ### 开发指南
 
 - [团队分工](docs/team-division.md)
-- [Claude Code配置](CLAUDE.md)
 
 ## 技术栈
 
@@ -486,5 +393,5 @@ test(paxos): add concurrent proposal tests
 ---
 
 **最后更新：** 2026-05-11  
-**项目状态：** ✅ 所有核心模块100%完成，285+测试全部通过  
-**功能完整度：** 企业级分布式数据库，支持SQL、JOIN、多语言客户端
+**项目状态：** 所有核心模块100%完成，285+测试全部通过  
+**功能完整度：** 分布式数据库，支持SQL、JOIN、多语言客户端
