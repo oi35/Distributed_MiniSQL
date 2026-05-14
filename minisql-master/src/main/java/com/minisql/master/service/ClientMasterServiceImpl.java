@@ -8,6 +8,8 @@ import com.minisql.master.metadata.RegionMetadata;
 import com.minisql.master.metadata.TableMetadata;
 import com.minisql.master.proto.*;
 import com.minisql.common.proto.ErrorCode;
+import com.minisql.common.proto.RegionInfo;
+import com.minisql.common.proto.RegionState;
 import com.minisql.common.proto.RouteEntry;
 import io.grpc.stub.StreamObserver;
 import org.slf4j.Logger;
@@ -53,6 +55,8 @@ public class ClientMasterServiceImpl extends ClientMasterServiceGrpc.ClientMaste
                     // 将Region分配到最低负载的在线服务器
                     ServerInfo leastLoaded = clusterManager.selectLeastLoadedServer();
                     if (leastLoaded != null) {
+                        // 先将服务器添加为副本，再设置为主副本
+                        metadataManager.addRegionReplica(regionId, leastLoaded.getServerId());
                         metadataManager.setRegionPrimary(regionId, leastLoaded.getServerId());
                         logger.info("Default region {} created for table {}, assigned to {}",
                                 regionId, tableName, leastLoaded.getServerId());
@@ -70,6 +74,26 @@ public class ClientMasterServiceImpl extends ClientMasterServiceGrpc.ClientMaste
                     .setSuccess(success);
 
             if (success) {
+                // 填充初始Region信息
+                RegionMetadata regionMeta = metadataManager.getRegion(tableName + "-region-0");
+                if (regionMeta != null) {
+                    RegionInfo regionInfo = RegionInfo.newBuilder()
+                            .setRegionId(regionMeta.getRegionId())
+                            .setTableName(regionMeta.getTableName())
+                            .setStartKey(ByteString.copyFromUtf8(regionMeta.getStartKey()))
+                            .setEndKey(ByteString.copyFromUtf8(regionMeta.getEndKey()))
+                            .setPrimaryServer(regionMeta.getPrimaryServer() != null ? regionMeta.getPrimaryServer() : "")
+                            .setState(regionMeta.getState())
+                            .setCreateTime(regionMeta.getCreateTime())
+                            .build();
+                    responseBuilder.addInitialRegions(regionInfo);
+                }
+
+                TableMetadata tableMeta = metadataManager.getTable(tableName);
+                if (tableMeta != null) {
+                    responseBuilder.setRouteTableVersion(tableMeta.getVersion());
+                }
+
                 responseBuilder.setErrorCode(ErrorCode.ERROR_OK);
             } else {
                 responseBuilder
