@@ -10,28 +10,42 @@
 ## 环境准备（提前完成）
 
 ```bash
-# 1. 编译全部模块
+# 1. 编译全部模块（生成 gRPC 桩代码并安装所有模块）
 cd Distributed_MiniSQL
 mvn clean install -DskipTests
 
 # 2. 启动 Zookeeper（嵌入式）
+# 使用 Maven 自动解析 curator-test 所有依赖（含 zookeeper-jute 等传递依赖），
+# 避免硬编码 classpath 路径在不同机器上不兼容的问题
 cd bootstrap
-java -cp ".;%USERPROFILE%\.m2\repository\org\apache\curator\curator-test\5.5.0\curator-test-5.5.0.jar;%USERPROFILE%\.m2\repository\org\apache\curator\curator-framework\5.5.0\curator-framework-5.5.0.jar;%USERPROFILE%\.m2\repository\org\apache\curator\curator-client\5.5.0\curator-client-5.5.0.jar;%USERPROFILE%\.m2\repository\org\apache\zookeeper\zookeeper\3.9.1\zookeeper-3.9.1.jar;%USERPROFILE%\.m2\repository\com\google\guava\guava\32.1.3-jre\guava-32.1.3-jre.jar;%USERPROFILE%\.m2\repository\org\slf4j\slf4j-api\2.0.9\slf4j-api-2.0.9.jar;%USERPROFILE%\.m2\repository\org\slf4j\slf4j-simple\2.0.9\slf4j-simple-2.0.9.jar" ZkStart
+# 将 classpath 写入临时文件（注意：PowerShell 中 -D 参数必须用单引号包裹）
+mvn -f ../minisql-master/pom.xml dependency:build-classpath '-DincludeScope=test' '-Dmdep.outputFile=zk-cp.txt' -q
+# 注：classpath 文件生成在 minisql-master/ 目录下（相对于 POM 路径）
+$CP = Get-Content ../minisql-master/zk-cp.txt -Raw
+
+# 编译辅助工具（ZkStart + CreateTableTest，供后续环节使用）
+javac -cp "$CP" ZkStart.java CreateTableTest.java
+
+# 启动 ZK（前台运行，阻塞终端）
+java -cp ".;$CP" ZkStart
 
 # 3. 启动 Master（新终端）
 cd minisql-master
-mvn exec:java -Dexec.mainClass="com.minisql.master.MasterServer"
+mvn exec:java '-Dexec.mainClass=com.minisql.master.MasterServer'
 
 # 4. 启动 RegionServer rs-001（新终端）
 cd minisql-regionserver
-mvn exec:java -Dexec.args="rs-001 8001"
+mvn exec:java '-Dexec.args=rs-001 8001'
 
 # 5. 启动 RegionServer rs-002（新终端）
 cd minisql-regionserver
-mvn exec:java -Dexec.args="rs-002 8002"
+mvn exec:java '-Dexec.args=rs-002 8002'
 
-# 6. 打包 Admin CLI
-cd minisql-admin && mvn package -DskipTests
+# 6. 打包 Admin CLI + 配置 classpath（fat jar 有依赖冲突，用 Maven classpath 代替）
+cd minisql-admin
+mvn package '-DskipTests'
+# 定义 admin 命令 classpath（供后续环节使用，同一终端生效）
+$AdminCP = Get-Content ../minisql-master/zk-cp.txt -Raw
 ```
 
 ---
@@ -68,7 +82,7 @@ Distributed_MiniSQL/
 
 ```bash
 # 2.1 查看集群健康状态 → 展示 HEALTHY、在线服务器数
-java -jar minisql-admin/target/minisql-admin-1.0-SNAPSHOT-jar-with-dependencies.jar cluster status
+java -cp "minisql-admin/target/classes;$AdminCP" com.minisql.admin.MiniSqlAdmin cluster status
 
 # 预期的输出：
 #   Cluster Health: HEALTHY
@@ -82,23 +96,31 @@ java -jar minisql-admin/target/minisql-admin-1.0-SNAPSHOT-jar-with-dependencies.
 
 ```bash
 # 2.2 查看集群统计信息 → 展示表/Region/数据量统计
-java -jar minisql-admin/target/minisql-admin-1.0-SNAPSHOT-jar-with-dependencies.jar cluster stats
+java -cp "minisql-admin/target/classes;$AdminCP" com.minisql.admin.MiniSqlAdmin cluster stats
 
 # 2.3 列出所有 RegionServer 节点 → 展示每个节点的状态、负载、Region数
-java -jar minisql-admin/target/minisql-admin-1.0-SNAPSHOT-jar-with-dependencies.jar cluster nodes
+java -cp "minisql-admin/target/classes;$AdminCP" com.minisql.admin.MiniSqlAdmin cluster nodes
 
 # 预期的输出：
 #   RegionServer List (2/2 online):
+#
 #     Server: rs-001
 #       Address: 0.0.0.0:8001
 #       State: ONLINE
 #       Load Score: 0.00
 #       Regions: 0
+#       Data Size: 0 B
+#       Uptime: ...
+#       Last Heartbeat: ...
+#
 #     Server: rs-002
 #       Address: 0.0.0.0:8002
 #       State: ONLINE
 #       Load Score: 0.00
 #       Regions: 0
+#       Data Size: 0 B
+#       Uptime: ...
+#       Last Heartbeat: ...
 ```
 
 **讲解：** `cluster nodes` 调用 Master 的 `AdminService.ListServers` RPC，返回每个 RegionServer 的 `ServerInfo`（地址、状态、负载评分、Region数、数据大小、运行时间、最后心跳时间）。
@@ -109,30 +131,43 @@ java -jar minisql-admin/target/minisql-admin-1.0-SNAPSHOT-jar-with-dependencies.
 
 ```bash
 # 3.1 列出所有表（初始为空）
-java -jar minisql-admin/target/minisql-admin-1.0-SNAPSHOT-jar-with-dependencies.jar table list
-# → "No tables found."
+java -cp "minisql-admin/target/classes;$AdminCP" com.minisql.admin.MiniSqlAdmin table list
+# → No tables found.
 
 # 3.2 创建表 users（通过 RegionServer 交互控制台）
 # 在 RegionServer rs-001 的终端输入：
 # RegionServer> put users user-1001 name=Alice age=30 email=alice@test.com
 # → PUT successful
-# （控制台自动在 Master 创建表元数据和默认 Region，然后写入数据）
+# （数据写入 RegionServer 本地存储，但表元数据还未注册到 Master）
 
-# 3.3 查看表列表
-java -jar minisql-admin/target/minisql-admin-1.0-SNAPSHOT-jar-with-dependencies.jar table list
-# → "Tables (1): - users"
+# 3.3 将表注册到 Master（使用 bootstrap 中的辅助工具，以便查看路由）
+# 保持 ZK 运行，在另一个闲置终端执行：
+cd bootstrap
+java -cp ".;$(Get-Content ../minisql-master/zk-cp.txt -Raw)" CreateTableTest
+#
+# 预期的输出：
+#   CreateTable result:
+#     Success: true
+#     Regions: 1
+#     Route version: 2
 
-# 3.4 查看表路由信息 → 展示 Region 分布
-java -jar minisql-admin/target/minisql-admin-1.0-SNAPSHOT-jar-with-dependencies.jar table route users
-# → Table: users
-#    Route table version: 1
-#    Regions:
+# 3.4 查看表列表
+java -cp "minisql-admin/target/classes;$AdminCP" com.minisql.admin.MiniSqlAdmin table list
+# → Tables (1):
+#   - users
+
+# 3.5 查看表路由信息 → 展示 Region 分布
+java -cp "minisql-admin/target/classes;$AdminCP" com.minisql.admin.MiniSqlAdmin table route users
+# → Route Table: users
+#    Version: 2
+#    Regions (1):
 #      Region: users-region-0
-#        Range: ["", "")
-#        Primary: rs-001 (localhost:8001)
+#        Range: [, )
+#        Primary: rs-001
+#        Replicas: rs-001
 ```
 
-**讲解：** 首次 `put` 操作时，RegionServer 自动在 Master 注册表和默认 Region。路由表存储在 Zookeeper 中，`GetRouteTable` RPC 从 `RouteTable` 对象读取，包含 `version` 用于客户端缓存失效检测。
+**讲解：** `put` 将数据写入 RegionServer 本地存储，再用 `CreateTableTest` 调用 Master 的 `CreateTable` RPC 注册表元数据（含列定义和默认 Region）。路由表存储在 Zookeeper 中，`GetRouteTable` RPC 从 `RouteTable` 对象读取，包含 `version` 用于客户端缓存失效检测。
 
 ---
 
@@ -155,7 +190,10 @@ RegionServer> put users user-1003 name=Charlie age=35
 
 # 4.2 GET - 按主键查询
 RegionServer> get users user-1001
-# → Key: user-1001, name=Alice, age=30
+# → Data:
+#     name = Alice
+#     age = 30
+#     email = alice@test.com
 
 # 4.3 EXISTS - 检查键是否存在
 RegionServer> exists users user-1001
@@ -169,12 +207,10 @@ RegionServer> list users
 # → user-1001 name=Alice age=30
 # → user-1002 name=Bob age=25
 # → user-1003 name=Charlie age=35
-# → Listed 3 rows
 
 RegionServer> list users 2
 # → user-1001 name=Alice age=30
 # → user-1002 name=Bob age=25
-# → Listed 2 rows
 
 # 4.5 DELETE - 删除数据
 RegionServer> delete users user-1003
@@ -185,7 +221,10 @@ RegionServer> get users user-1003
 
 # 4.6 验证数据仍然存在
 RegionServer> get users user-1001
-# → Key: user-1001, name=Alice, age=30
+# → Data:
+#     name = Alice
+#     age = 30
+#     email = alice@test.com
 ```
 
 **讲解每个操作的实现（演示中使用控制台路径）：**
@@ -231,14 +270,14 @@ RegionServer> get users user-1001
 
 ```bash
 # 6.1 当前集群状态（2节点在线）
-java -jar minisql-admin/target/minisql-admin-1.0-SNAPSHOT-jar-with-dependencies.jar cluster nodes
+java -cp "minisql-admin/target/classes;$AdminCP" com.minisql.admin.MiniSqlAdmin cluster nodes
 
 # 6.2 停掉 rs-002（在 rs-002 终端按 Ctrl+C）
 # 或从另一个终端：
 # taskkill /F /PID <rs-002-pid>
 
 # 6.3 查看集群状态 → 变为 DEGRADED
-java -jar minisql-admin/target/minisql-admin-1.0-SNAPSHOT-jar-with-dependencies.jar cluster status
+java -cp "minisql-admin/target/classes;$AdminCP" com.minisql.admin.MiniSqlAdmin cluster status
 # → Cluster Health: DEGRADED
 # → Total Servers: 2
 # → Online Servers: 1
@@ -249,10 +288,10 @@ java -jar minisql-admin/target/minisql-admin-1.0-SNAPSHOT-jar-with-dependencies.
 
 # 6.5 重启 rs-002
 cd minisql-regionserver
-mvn exec:java -Dexec.args="rs-002 8002"
+mvn exec:java '-Dexec.args=rs-002 8002'
 
 # 6.6 确认集群恢复健康
-java -jar minisql-admin/target/minisql-admin-1.0-SNAPSHOT-jar-with-dependencies.jar cluster status
+java -cp "minisql-admin/target/classes;$AdminCP" com.minisql.admin.MiniSqlAdmin cluster status
 # → Cluster Health: HEALTHY
 # → Online Servers: 2
 ```
@@ -268,8 +307,8 @@ java -jar minisql-admin/target/minisql-admin-1.0-SNAPSHOT-jar-with-dependencies.
 ```bash
 # 1. 启动 GatewayServer（新终端）
 cd minisql-client
-mvn exec:java -Dexec.mainClass="com.minisql.client.gateway.GatewayServer" \
-  -Dgateway.port=9090 -Dgateway.master=localhost:8000
+mvn exec:java '-Dexec.mainClass=com.minisql.client.gateway.GatewayServer' \
+  '-Dgateway.port=9090' '-Dgateway.master=localhost:8000'
 
 # 2. 用 Java GatewayClient 测试
 java -cp "bootstrap/;minisql-client/target/minisql-client-1.0-SNAPSHOT.jar;..." \
